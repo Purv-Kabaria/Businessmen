@@ -23,7 +23,12 @@
     "worker:contacts": "dotenv -- tsx workers/contacts-sync-worker.ts",
     "worker:audio": "dotenv -- tsx workers/audio-transcript-worker.ts",
     "worker:transcribe": "dotenv -- tsx workers/transcribe-worker.ts",
-    "workers": "concurrently \"pnpm worker:contacts\" \"pnpm worker:audio\" \"pnpm worker:transcribe\""
+    "workers": "concurrently \"pnpm worker:contacts\" \"pnpm worker:audio\" \"pnpm worker:transcribe\"",
+    "test:transcriber": "tsx scripts/test-transcriber.ts",
+    "test:sentiment": "tsx scripts/test-sentiment.ts",
+    "test:summarizer": "dotenv -- tsx scripts/test-summarizer.ts",
+    "test:pipeline": "dotenv -- tsx scripts/test-all-pipeline.ts",
+    "seed:interaction": "dotenv -- tsx scripts/seed-interaction-from-audio.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.500.0",

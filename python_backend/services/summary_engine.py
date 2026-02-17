@@ -68,7 +68,18 @@ class SummaryEngine:
 
         order = []
         for r in (results or [])[: self.TOP_K_CHUNKS]:
-            idx = int(r.get("id", 0)) if r.get("id") is not None else 0
+            # FlashRank may return {"id", "text", "score", "meta"} or similar
+            text = r.get("text") if isinstance(r.get("text"), str) and r.get("text") else None
+            if text:
+                order.append(text)
+                continue
+            idx = 0
+            raw_id = r.get("id")
+            if raw_id is not None:
+                try:
+                    idx = int(raw_id)
+                except (TypeError, ValueError):
+                    idx = 0
             if 0 <= idx < len(chunks):
                 order.append(chunks[idx])
         return order if order else chunks[: self.TOP_K_CHUNKS]
@@ -119,14 +130,36 @@ JSON with exactly two keys: "summary" (one paragraph string) and "action_items" 
         try:
             text = self._call_ollama(prompt, max_tokens=512, temperature=0.2)
         except requests.RequestException as e:
-            return {"summary": context[:1500], "action_items": [], "error": str(e)}
+            return {"summary": "", "action_items": [], "error": str(e)}
 
-        match = re.search(r"\{[\s\S]*\}", text)
+        if not text:
+            return default_out
+
+        # Strip markdown code blocks (Ollama often wraps JSON in ```json ... ```)
+        cleaned = text.strip()
+        for marker in ("```json", "```"):
+            if marker in cleaned:
+                parts = cleaned.split(marker, 1)
+                if len(parts) > 1:
+                    cleaned = parts[1].split("```")[0].strip()
+                    break
+
+        match = re.search(r"\{[\s\S]*\}", cleaned)
         if match:
             try:
-                return json.loads(match.group(0))
+                parsed = json.loads(match.group(0))
+                if isinstance(parsed, dict):
+                    summary_str = parsed.get("summary") or parsed.get("Summary") or ""
+                    action_items = parsed.get("action_items") or parsed.get("actionItems") or parsed.get("action items") or []
+                    if not isinstance(summary_str, str):
+                        summary_str = str(summary_str) if summary_str is not None else ""
+                    if not isinstance(action_items, list):
+                        action_items = []
+                    action_items = [str(x).strip() for x in action_items if x is not None and str(x).strip()]
+                    return {"summary": summary_str.strip(), "action_items": action_items}
             except json.JSONDecodeError:
                 pass
 
-        default_out["summary"] = text[:2000] if text else context[:1500]
+        # Fallback: use LLM output as summary when JSON parse failed (cap length)
+        default_out["summary"] = text[:2000].strip()
         return default_out

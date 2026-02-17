@@ -118,8 +118,10 @@ class SentimentEngine:
             label = labels[idx] if idx < len(labels) else "neutral"
             score = float(row[idx])
             distribution = {labels[j]: round(float(row[j]), 4) for j in range(min(len(labels), len(row)))}
+            # Include both "label" and "sentiment" for API compatibility (transcriber expects "sentiment")
             results.append({
                 "label": label,
+                "sentiment": label,
                 "score": round(score, 4),
                 "distribution": distribution,
             })

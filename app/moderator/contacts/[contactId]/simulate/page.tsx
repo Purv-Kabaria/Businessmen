@@ -161,103 +161,82 @@ export default function SimulationPage() {
                 </div>
             )}
 
-            {/* Main Strategy Sequence: single column on mobile, 3 cols on lg */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8">
-                {/* Left Column: Recommendations */}
-                <div className="lg:col-span-2 space-y-4 sm:space-y-6 min-w-0">
+            {/* Business-first: Recommended sequence + objections + repetition (main content) */}
+            <div className="space-y-6 sm:space-y-8">
+                <Card className="min-w-0 overflow-hidden border-primary/20">
+                    <CardHeader className="px-4 sm:px-6 pb-2">
+                        <CardTitle className="text-base font-medium flex items-center gap-2">
+                            <ListOrdered className="h-4 w-4 shrink-0 text-primary" /> Recommended sequence
+                        </CardTitle>
+                        <CardDescription className="text-sm">Suggested conversation steps based on history.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="px-4 sm:px-6">
+                        <ol className="space-y-3 relative pl-4 border-l border-border ml-1 py-1">
+                            {(data.strategic_sequence.filter((step, i, arr) => arr.findIndex((s) => s.trim() === step.trim()) === i)).map((step, i) => (
+                                <li key={i} className="relative min-w-0">
+                                    <span className="absolute -left-4 top-0 text-xs text-muted-foreground font-medium">{i + 1}.</span>
+                                    <p className="text-sm leading-relaxed wrap-break-word pl-0">{step}</p>
+                                </li>
+                            ))}
+                        </ol>
+                    </CardContent>
+                </Card>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
                     <Card className="min-w-0 overflow-hidden">
-                        <CardHeader className="px-4 sm:px-6">
-                            <CardTitle className="text-base font-medium flex items-center gap-2">
-                                <ListOrdered className="h-4 w-4 shrink-0 text-muted-foreground" /> Recommended sequence
+                        <CardHeader className="pb-2 px-4 sm:px-6">
+                            <CardTitle className="text-sm font-medium flex items-center gap-2">
+                                <Target className="h-4 w-4 shrink-0 text-muted-foreground" /> Predicted objections
                             </CardTitle>
-                            <CardDescription className="text-sm">Suggested conversation steps based on history.</CardDescription>
                         </CardHeader>
                         <CardContent className="px-4 sm:px-6">
-                            <ol className="space-y-3 relative pl-4 border-l border-border ml-1 py-1">
-                                {(data.strategic_sequence.filter((step, i, arr) => arr.findIndex((s) => s.trim() === step.trim()) === i)).map((step, i) => (
-                                    <li key={i} className="relative min-w-0">
-                                        <span className="absolute -left-4 top-0 text-xs text-muted-foreground font-medium">{i + 1}.</span>
-                                        <p className="text-sm leading-relaxed wrap-break-word pl-0">{step}</p>
+                            <ul className="space-y-2">
+                                {data.likely_objections.map((obj, i) => (
+                                    <li key={i} className="text-xs sm:text-sm bg-muted/40 p-2 rounded-md border text-foreground/90 wrap-break-word">
+                                        {obj}
                                     </li>
                                 ))}
-                            </ol>
+                                {data.likely_objections.length === 0 && <p className="text-xs sm:text-sm text-muted-foreground italic">None detected.</p>}
+                            </ul>
                         </CardContent>
                     </Card>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
-                        <Card className="min-w-0 overflow-hidden">
-                            <CardHeader className="pb-2 px-4 sm:px-6">
-                                <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                                    Predicted objections
-                                </CardTitle>
-                            </CardHeader>
-                            <CardContent className="px-4 sm:px-6">
-                                <ul className="space-y-2">
-                                    {data.likely_objections.map((obj, i) => (
-                                        <li key={i} className="text-xs sm:text-sm bg-muted/40 p-2 rounded-md border text-foreground/90 wrap-break-word">
-                                            {obj}
-                                        </li>
-                                    ))}
-                                    {data.likely_objections.length === 0 && <p className="text-xs sm:text-sm text-muted-foreground italic">None detected.</p>}
-                                </ul>
-                            </CardContent>
-                        </Card>
-
-                        <Card className="min-w-0 overflow-hidden">
-                            <CardHeader className="pb-2 px-4 sm:px-6">
-                                <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                                    Repetition risks
-                                </CardTitle>
-                            </CardHeader>
-                            <CardContent className="px-4 sm:px-6">
-                                <ul className="space-y-2">
-                                    {data.repetition_risks.map((risk, i) => (
-                                        <li key={i} className="text-xs sm:text-sm bg-muted/40 p-2 rounded-md border text-foreground/90 wrap-break-word">
-                                            {risk}
-                                        </li>
-                                    ))}
-                                    {data.repetition_risks.length === 0 && <p className="text-xs sm:text-sm text-muted-foreground italic">None detected.</p>}
-                                </ul>
-                            </CardContent>
-                        </Card>
-                    </div>
-                </div>
-
-                {/* Right Column: Key Metrics - full width on mobile, sidebar on lg */}
-                <div className="space-y-4 sm:space-y-6 min-w-0 lg:min-w-0">
                     <Card className="min-w-0 overflow-hidden">
-                        <CardHeader className="px-4 sm:px-6">
-                            <CardTitle className="text-base font-medium">Tone</CardTitle>
+                        <CardHeader className="pb-2 px-4 sm:px-6">
+                            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                                Repetition risks
+                            </CardTitle>
                         </CardHeader>
                         <CardContent className="px-4 sm:px-6">
-                            <p className="text-sm font-medium wrap-break-word">{data.tone_recommendation}</p>
-                            <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
-                                Suggested tone for the next call.
-                            </p>
+                            <ul className="space-y-2">
+                                {data.repetition_risks.map((risk, i) => (
+                                    <li key={i} className="text-xs sm:text-sm bg-muted/40 p-2 rounded-md border text-foreground/90 wrap-break-word">
+                                        {risk}
+                                    </li>
+                                ))}
+                                {data.repetition_risks.length === 0 && <p className="text-xs sm:text-sm text-muted-foreground italic">None detected.</p>}
+                            </ul>
                         </CardContent>
                     </Card>
+                </div>
 
-                    <Card className="min-w-0 overflow-hidden">
-                        <CardHeader className="px-4 sm:px-6">
-                            <CardTitle className="text-sm font-medium text-muted-foreground">Metadata</CardTitle>
-                        </CardHeader>
-                        <CardContent className="px-4 sm:px-6 space-y-2 text-xs font-mono text-muted-foreground">
-                            <div className="flex justify-between gap-2">
-                                <span className="shrink-0">Model:</span>
-                                <span className="text-foreground text-right truncate">{data.meta?.model ?? 'Gemma 3 (4B)'}</span>
-                            </div>
-                            <div className="flex justify-between gap-2">
-                                <span className="shrink-0">Retrieval:</span>
-                                <span className="text-foreground text-right truncate">{data.meta?.retrieval ?? 'RAG (FAISS)'}</span>
-                            </div>
-                            <div className="flex justify-between gap-2">
-                                <span className="shrink-0">Latency:</span>
-                                <span className="text-foreground">
-                                    {loading ? '...' : (data.meta?.latency_ms != null ? `${(data.meta.latency_ms / 1000).toFixed(2)}s` : '—')}
-                                </span>
-                            </div>
-                        </CardContent>
-                    </Card>
+                {/* Tone: compact */}
+                <div className="flex flex-wrap items-baseline gap-2 text-sm">
+                    <span className="text-muted-foreground font-medium">Tone:</span>
+                    <span className="text-foreground">{data.tone_recommendation}</span>
+                </div>
+
+                {/* Metadata: minimal one-line technical details */}
+                <div className="text-xs text-muted-foreground font-mono flex flex-wrap items-center gap-x-4 gap-y-1">
+                    <span>{data.meta?.model ?? "Gemma 3 (4B)"}</span>
+                    <span>·</span>
+                    <span>{data.meta?.retrieval ?? "RAG (FAISS)"}</span>
+                    {data.meta?.latency_ms != null && !loading && (
+                        <>
+                            <span>·</span>
+                            <span>{(data.meta.latency_ms / 1000).toFixed(2)}s</span>
+                        </>
+                    )}
                 </div>
             </div>
         </div>
