@@ -105,7 +105,7 @@ export function Navbar() {
               </span>
               <span
                 className={
-                  scrolled ? "text-primary-foreground" : "text-primary"
+                  scrolled ? "text-primary-foreground" : "text-foreground"
                 }>
                 {NAVBAR.name.secondary}
               </span>

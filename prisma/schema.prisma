@@ -15,35 +15,43 @@ enum Role {
 
 model User {
   id        String   @id @default(cuid())
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  email     String  @unique
-  fullName  String
-  password  String
-  role      Role    @default(USER)
+  email    String @unique
+  fullName String @map("full_name")
+  password String
+  role     Role   @default(USER)
 
   passwordResetTokens PasswordResetToken[]
+  interactions        Interaction[]        @relation("CreatedBy")
+
+  @@map("users")
 }
 
 model PasswordResetToken {
   id        String   @id @default(cuid())
   token     String   @unique
-  createdAt DateTime @default(now())
-  expiresAt DateTime
+  createdAt DateTime @default(now()) @map("created_at")
+  expiresAt DateTime @map("expires_at")
 
-  userId String
+  userId String @map("user_id")
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("password_reset_tokens")
 }
 
 model Contact {
-  id          String   @id @default(cuid())
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime
-
-  name        String
-  phone       String
-  email       String?
+  @@map("contacts")
+  id           String        @id @default(uuid())
+  name         String
+  email        String?
+  phone        String        @unique
+  currentStage String        @default("Met") @map("current_stage")
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+  interactions Interaction[]
+  followups    FollowUp[]
   company     String?
   intentTags  Json?
   sourceMode  String
@@ -51,4 +59,43 @@ model Contact {
   deviceId    String?
   version     Int      @default(1)
   pendingSync Boolean  @default(true)
+}
+
+model Interaction {
+  id                 String   @id @default(uuid())
+  contactId          String   @map("contact_id")
+  contact            Contact  @relation(fields: [contactId], references: [id])
+  audioObjectKey     String?  @map("audio_object_key")
+  transcript         String?
+  structuredSnapshot Json?    @map("structured_snapshot")
+  tags               Json?
+  createdBy          String   @map("created_by")
+  createdByUser      User     @relation("CreatedBy", fields: [createdBy], references: [id])
+  createdAt          DateTime @default(now()) @map("created_at")
+  aiJobs             AiJob[]
+
+  @@map("interactions")
+}
+
+model FollowUp {
+  id        String   @id @default(uuid())
+  contactId String   @map("contact_id")
+  contact   Contact  @relation(fields: [contactId], references: [id])
+  dueDate   DateTime @map("due_date")
+  status    String   @default("Pending")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("follow_ups")
+}
+
+model AiJob {
+  id            String      @id @default(uuid())
+  interactionId String      @map("interaction_id")
+  interaction   Interaction @relation(fields: [interactionId], references: [id])
+  status        String      @default("pending")
+  retryCount    Int         @default(0) @map("retry_count")
+  createdAt     DateTime    @default(now()) @map("created_at")
+
+  @@map("ai_jobs")
+}
 }

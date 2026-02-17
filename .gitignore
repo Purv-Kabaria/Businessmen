@@ -37,7 +37,6 @@ yarn-error.log*
 
 # db backup files and agents
 /db/
-/.agent/
 
 # vercel
 .vercel
