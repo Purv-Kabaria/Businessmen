@@ -319,7 +319,7 @@ function AdminUsersPageContent() {
             <BreadcrumbSeparator />
             <BreadcrumbItem>
               <BreadcrumbLink asChild>
-                <Link href="/admin">Admin Dashboard</Link>
+                <Link href="/admin/dashboard">Admin Dashboard</Link>
               </BreadcrumbLink>
             </BreadcrumbItem>
             <BreadcrumbSeparator />

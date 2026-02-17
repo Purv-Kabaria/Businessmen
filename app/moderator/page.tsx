@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { ArrowLeft, Loader2, Users, UserCheck, Shield, FileAudio } from "lucide-react";
+import { Loader2, Users, FileAudio, TrendingUp, LayoutDashboard } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -31,29 +31,40 @@ export default function ModeratorPage() {
   const router = useRouter();
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
-    const fetchAnalytics = async () => {
+    const fetchData = async () => {
       try {
-        const response = await fetch("/api/analytics/users");
-        if (response.ok) {
-          const result = await response.json();
-          if (result.success && result.data) {
-            setAnalytics(result.data);
-          } else {
-            router.push("/login");
-          }
+        const [analyticsRes, userRes] = await Promise.all([
+          fetch("/api/analytics/users"),
+          fetch("/api/user/read", { credentials: "include" }),
+        ]);
+        if (!analyticsRes.ok) {
+          router.push("/login");
+          return;
+        }
+        const result = await analyticsRes.json();
+        if (result.success && result.data) {
+          setAnalytics(result.data);
         } else {
           router.push("/login");
+          return;
+        }
+        if (userRes.ok) {
+          const userData = await userRes.json();
+          if (userData?.success && userData?.data?.role === "ADMIN") {
+            setIsAdmin(true);
+          }
         }
       } catch (error) {
-        console.error("Failed to fetch analytics", error);
+        console.error("Failed to fetch", error);
         router.push("/login");
       } finally {
         setIsLoading(false);
       }
     };
-    fetchAnalytics();
+    fetchData();
   }, [router]);
 
   if (isLoading) {
@@ -102,8 +113,16 @@ export default function ModeratorPage() {
           </BreadcrumbList>
         </Breadcrumb>
 
-        <div className="mb-6 flex items-center gap-4">
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
           <h1 className="text-3xl font-bold font-serif">Moderator Dashboard</h1>
+          {isAdmin && (
+            <Link href="/admin/dashboard">
+              <Button variant="outline" size="sm" className="gap-1.5">
+                <LayoutDashboard className="h-4 w-4" />
+                Admin Dashboard
+              </Button>
+            </Link>
+          )}
         </div>
 
         <div className="mt-12">
@@ -113,16 +132,16 @@ export default function ModeratorPage() {
             variants={containerVariants}
             initial="hidden"
             animate="visible">
-            <motion.div variants={itemVariants}>
-              <Link href="/moderator/users">
-                <Card className="hover:bg-accent hover:border-primary transition-colors cursor-pointer">
+            <motion.div variants={itemVariants} className="h-full">
+              <Link href="/moderator/users" className="block h-full">
+                <Card className="h-full flex flex-col hover:bg-accent hover:border-primary transition-colors cursor-pointer">
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                       <Users className="h-5 w-5 text-primary" />
                       Manage Users
                     </CardTitle>
                   </CardHeader>
-                  <CardContent>
+                  <CardContent className="flex-1">
                     <p className="text-sm text-muted-foreground">
                       View, create, edit, and delete users.
                     </p>
@@ -130,18 +149,35 @@ export default function ModeratorPage() {
                 </Card>
               </Link>
             </motion.div>
-            <motion.div variants={itemVariants}>
-              <Link href="/moderator/audio">
-                <Card className="hover:bg-accent hover:border-primary transition-colors cursor-pointer">
+            <motion.div variants={itemVariants} className="h-full">
+              <Link href="/moderator/audio" className="block h-full">
+                <Card className="h-full flex flex-col hover:bg-accent hover:border-primary transition-colors cursor-pointer">
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                       <FileAudio className="h-5 w-5 text-primary" />
                       Audio Review
                     </CardTitle>
                   </CardHeader>
-                  <CardContent>
+                  <CardContent className="flex-1">
                     <p className="text-sm text-muted-foreground">
                       Listen to recorded interactions and view contact details.
+                    </p>
+                  </CardContent>
+                </Card>
+              </Link>
+            </motion.div>
+            <motion.div variants={itemVariants} className="h-full">
+              <Link href="/moderator/deals" className="block h-full">
+                <Card className="h-full flex flex-col hover:bg-accent hover:border-primary transition-colors cursor-pointer">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <TrendingUp className="h-5 w-5 text-primary" />
+                      Deal Review
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="flex-1">
+                    <p className="text-sm text-muted-foreground">
+                      Mark interactions as profitable, engaging, worthy and add remarks in table form.
                     </p>
                   </CardContent>
                 </Card>

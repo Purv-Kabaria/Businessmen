@@ -33,3 +33,12 @@ class SummarizeResponse(BaseModel):
     summary: str
     meta: Optional[dict] = None
     error: Optional[str] = None
+class ExtractContactRequest(BaseModel):
+    text: str
+    model: Optional[str] = "gemma3:4b"
+
+
+class ExtractContactResponse(BaseModel):
+    success: bool
+    data: Optional[dict] = None  # name, company, email
+    error: Optional[str] = None

@@ -1,23 +1,19 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef } from "react";
+import { useLiveQuery } from "dexie-react-hooks";
+import { db, OfflineContact } from "@/lib/db";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Mic, Square, Save, Loader2, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
-import {
-    appendContactInteraction,
-    getAllContacts,
-    enqueueAudioTranscriptItem,
-    type ContactRecord,
-} from "@/modules/capture/db";
 
 export function InteractionCapture() {
     const [searchQuery, setSearchQuery] = useState("");
-    const [selectedContact, setSelectedContact] = useState<ContactRecord | null>(null);
-    const [contacts, setContacts] = useState<ContactRecord[]>([]);
+    const [selectedContact, setSelectedContact] = useState<OfflineContact | null>(null);
     const [isRecording, setIsRecording] = useState(false);
     const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
     const [transcript, setTranscript] = useState(""); // Manual note for now
@@ -25,24 +21,21 @@ export function InteractionCapture() {
 
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const chunksRef = useRef<Blob[]>([]);
-    const selectedContactRef = useRef<ContactRecord | null>(null);
-    const recordingEnqueuedRef = useRef(false);
 
-    useEffect(() => {
-        selectedContactRef.current = selectedContact;
-    }, [selectedContact]);
-
-    useEffect(() => {
-        getAllContacts().then(setContacts);
-    }, []);
-
-    const searchResults = searchQuery.length >= 2
-        ? contacts.filter(
-            (c) =>
-                c.name.toLowerCase().startsWith(searchQuery.toLowerCase()) ||
-                c.phone.startsWith(searchQuery)
-        ).slice(0, 5)
-        : [];
+    // Search contacts locally
+    const searchResults = useLiveQuery(
+        async () => {
+            if (!searchQuery || searchQuery.length < 2) return [];
+            return await db.contacts
+                .where("name")
+                .startsWithIgnoreCase(searchQuery)
+                .or("phone")
+                .startsWith(searchQuery)
+                .limit(5)
+                .toArray();
+        },
+        [searchQuery]
+    );
 
     const startRecording = async () => {
         try {
@@ -59,18 +52,6 @@ export function InteractionCapture() {
                 const blob = new Blob(chunksRef.current, { type: "audio/webm" });
                 setAudioBlob(blob);
                 chunksRef.current = [];
-                const contact = selectedContactRef.current;
-                if (contact) {
-                    const now = Date.now();
-                    enqueueAudioTranscriptItem({
-                        audio_blob: blob,
-                        contact_local_id: contact.local_id,
-                        source_mode: "field",
-                    }).then((id) => {
-                        recordingEnqueuedRef.current = true;
-                        appendContactInteraction(contact.local_id, { id, created_at: now }).catch(() => {});
-                    });
-                }
             };
 
             mediaRecorder.start();
@@ -95,33 +76,29 @@ export function InteractionCapture() {
             toast.error("Please select a contact first.");
             return;
         }
-        if (!audioBlob) {
-            toast.info("Record audio to save to the queue.");
-            return;
-        }
 
         setIsSaving(true);
         try {
-            if (recordingEnqueuedRef.current) {
-                recordingEnqueuedRef.current = false;
-                toast.success("Audio saved offline. Use Sync audio when online.");
-            } else {
-                const now = Date.now();
-                const id = await enqueueAudioTranscriptItem({
-                    audio_blob: audioBlob,
-                    contact_local_id: selectedContact.local_id,
-                    source_mode: "field",
-                });
-                await appendContactInteraction(selectedContact.local_id, { id, created_at: now });
-                toast.success("Audio saved offline. Use Sync audio when online.");
-            }
+            await db.interactions.add({
+                id: crypto.randomUUID(),
+                contactId: selectedContact.id,
+                audioBlob: audioBlob || undefined,
+                transcript: transcript || undefined, // Treat note as transcript/context
+                createdAt: new Date().toISOString(),
+                createdBy: "current-user-id", // In real app, get from session context
+                syncStatus: "pending",
+            });
+
+            toast.success("Interaction saved offline!");
+
+            // Reset form
             setSelectedContact(null);
             setSearchQuery("");
             setAudioBlob(null);
             setTranscript("");
         } catch (error) {
-            console.error("Failed to save:", error);
-            toast.error("Failed to save.");
+            console.error("Failed to save interaction:", error);
+            toast.error("Failed to save interaction.");
         } finally {
             setIsSaving(false);
         }
@@ -147,11 +124,11 @@ export function InteractionCapture() {
                             <div className="absolute z-10 w-full mt-1 bg-popover border rounded-md shadow-lg">
                                 {searchResults.map((contact) => (
                                     <div
-                                        key={contact.local_id}
+                                        key={contact.id}
                                         className="p-2 hover:bg-muted cursor-pointer text-sm"
                                         onClick={() => {
                                             setSelectedContact(contact);
-                                            setSearchQuery("");
+                                            setSearchQuery(""); // Clear search after selection
                                         }}
                                     >
                                         <div className="font-medium">{contact.name}</div>
@@ -214,7 +191,7 @@ export function InteractionCapture() {
             </div>
 
             {/* 4. Save Button */}
-            <Button onClick={handleSave} className="w-full" disabled={isSaving || !selectedContact || !audioBlob}>
+            <Button onClick={handleSave} className="w-full" disabled={isSaving || !selectedContact}>
                 {isSaving ? (
                     <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving...

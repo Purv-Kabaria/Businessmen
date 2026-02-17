@@ -9,6 +9,7 @@ import Link from "next/link";
 import { Loader2, CheckCircle2, UserRound, Phone, Mail, Mic, MicOff, Square, Play, Trash2, ArrowLeft, Plus } from "lucide-react";
 
 import { useMediaRecorder } from "@/hooks/use-media-recorder";
+import { db } from "@/lib/db";
 
 import {
   AlertDialog,
@@ -49,7 +50,7 @@ import { Badge } from "@/components/ui/badge";
 import { Check, ChevronsUpDown, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { STALL_INTENTS } from "@/modules/capture/constants";
-import { addContact, appendContactInteraction, clearDraft, deleteAudioTranscriptItem, enqueueAudioTranscriptItem, getDeviceId, getDraft, setDraft, updateAudioTranscriptItemContactLocalId, type DraftData } from "@/modules/capture/db";
+import { addContact, clearDraft, getDeviceId, getDraft, setDraft, type DraftData } from "@/modules/capture/db";
 import { hasLocalDuplicate } from "@/modules/capture/local-duplicate";
 import { stallLeadSchema, type StallLeadFormValues } from "@/modules/capture/schema";
 import type { StallIntent } from "@/modules/capture/constants";
@@ -83,40 +84,6 @@ export default function FieldPage() {
   const { isRecording, audioBlob, startRecording, stopRecording, clearRecording } = useMediaRecorder();
   const [recordingTime, setRecordingTime] = useState(0);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
-  const draftAudioQueueIdRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    if (!audioBlob || draftAudioQueueIdRef.current != null) return;
-    const draftId = "draft-" + crypto.randomUUID();
-    enqueueAudioTranscriptItem({
-      audio_blob: audioBlob,
-      contact_local_id: draftId,
-      source_mode: "field",
-    }).then((id) => {
-      draftAudioQueueIdRef.current = id;
-      getDraft("field").then((d) => {
-        const base = d ?? { mode: "field" as const, updated_at: 0 };
-        setDraft({ ...base, draft_audio_queue_id: id, updated_at: Date.now() }).catch(() => {});
-      });
-    }).catch(() => {
-      draftAudioQueueIdRef.current = null;
-    });
-  }, [audioBlob]);
-
-  async function clearRecordingAndDraft() {
-    const id = draftAudioQueueIdRef.current;
-    draftAudioQueueIdRef.current = null;
-    if (id) {
-      try {
-        await deleteAudioTranscriptItem(id);
-        const d = await getDraft("field");
-        if (d) {
-          await setDraft({ ...d, draft_audio_queue_id: undefined, updated_at: Date.now() });
-        }
-      } catch (_) {}
-    }
-    clearRecording();
-  }
 
   useEffect(() => {
     if (isRecording) {
@@ -176,8 +143,7 @@ export default function FieldPage() {
           phone: phone.trim() || undefined,
           email: email.trim() || undefined,
           intent_tags,
-          updated_at: Date.now(),
-          draft_audio_queue_id: draftAudioQueueIdRef.current ?? undefined,
+          updated_at: 0,
         }).catch(() => { });
         draftTimerRef.current = null;
       }, DRAFT_DEBOUNCE_MS);
@@ -190,7 +156,6 @@ export default function FieldPage() {
 
   function handleContinueDraft() {
     if (pendingDraft) {
-      draftAudioQueueIdRef.current = pendingDraft.draft_audio_queue_id ?? null;
       form.reset(draftToFormValues(pendingDraft));
       clearDraft("field").catch(() => { });
     }
@@ -204,63 +169,28 @@ export default function FieldPage() {
     setShowDraftPrompt(false);
   }
 
-  async function saveContactToIndexedDBField(values: StallLeadFormValues) {
-    const local_id = crypto.randomUUID();
-    const device_id = getDeviceId();
-    const now = Date.now();
-    await addContact({
-      local_id,
-      server_id: null,
-      name: values.name.trim(),
-      phone: values.phone,
-      email: values.email?.trim() || null,
-      company: null,
-      intent_tags: values.intent_tags,
-      source_mode: "field",
-      version: 1,
-      pending_sync: true,
-      device_id,
-      updated_at: now,
-      event_id: null,
-    });
-    const draftId = draftAudioQueueIdRef.current;
-    if (draftId) {
-      await updateAudioTranscriptItemContactLocalId(draftId, local_id);
-      await appendContactInteraction(local_id, { id: draftId, created_at: now });
-      draftAudioQueueIdRef.current = null;
-    } else if (audioBlob) {
-      const id = await enqueueAudioTranscriptItem({
-        audio_blob: audioBlob,
-        contact_local_id: local_id,
-        source_mode: "field",
-      });
-      await appendContactInteraction(local_id, { id, created_at: now });
-    }
-    clearDraft("field").catch(() => { });
-    form.reset({ name: "", phone: "", email: "", intent_tags: [] });
-    clearRecordingAndDraft();
-    setCapturedCardImage(null);
-    setShowSuccess(true);
-    toast.success("Saved offline. Use Sync contacts and Sync audio when online.");
-    setTimeout(() => setShowSuccess(false), 2200);
-  }
-
   async function saveContactToApi(values: StallLeadFormValues) {
     const device_id = getDeviceId();
 
-    const contactRes = await fetch("/api/contacts", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({
-        name: values.name.trim(),
-        phone: values.phone,
-        email: values.email?.trim() || "",
-        intentTags: values.intent_tags,
-        sourceMode: "field",
-        deviceId: device_id,
-      }),
-    });
+    let contactRes: Response;
+    try {
+      contactRes = await fetch("/api/contacts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          name: values.name.trim(),
+          phone: values.phone,
+          email: values.email?.trim() || "",
+          intentTags: values.intent_tags,
+          sourceMode: "field",
+          deviceId: device_id,
+        }),
+      });
+    } catch (err) {
+      const isNetworkError = err instanceof TypeError && (err.message === "Failed to fetch" || err.message?.includes("fetch"));
+      throw new Error(isNetworkError ? "Cannot reach server. Check your connection and that the app is running." : (err instanceof Error ? err.message : "Request failed."));
+    }
 
     const contactJson = await contactRes.json().catch(() => ({}));
     if (!contactRes.ok) {
@@ -278,30 +208,29 @@ export default function FieldPage() {
       formData.append("audio_file", audioBlob, "recording.webm");
       formData.append("tags", JSON.stringify({ source: "field-capture" }));
 
-      const interactionRes = await fetch("/api/interactions", {
-        method: "POST",
-        credentials: "include",
-        body: formData,
-      });
-
-      if (!interactionRes.ok) {
-        let msg = "audio upload failed";
-        try {
-          const interactionJson = await interactionRes.json();
-          msg = (interactionJson?.error?.message ?? interactionJson?.message ?? msg) as string;
-        } catch {
-          msg = interactionRes.status === 503 ? "storage unavailable (check MinIO)" : "audio upload failed";
+      try {
+        const interactionRes = await fetch("/api/interactions", {
+          method: "POST",
+          credentials: "include",
+          body: formData,
+        });
+        if (!interactionRes.ok) {
+          let msg = "audio upload failed";
+          try {
+            const interactionJson = await interactionRes.json();
+            msg = (interactionJson?.error?.message ?? interactionJson?.message ?? msg) as string;
+          } catch {
+            msg = interactionRes.status === 503 ? "storage unavailable (check MinIO)" : "audio upload failed";
+          }
+          console.warn("Audio interaction upload failed:", msg);
+          toast.error(`Contact saved, but ${msg.toLowerCase()}.`);
         }
-        console.warn("Audio interaction upload failed:", msg);
-        toast.error(`Contact saved, but ${msg.toLowerCase()}.`);
+      } catch (err) {
+        const isNetworkError = err instanceof TypeError && (err.message === "Failed to fetch" || (err as Error).message?.includes("fetch"));
+        toast.error(isNetworkError ? "Contact saved, but could not reach server to upload audio." : "Contact saved, but audio upload failed.");
       }
     }
 
-    const draftId = draftAudioQueueIdRef.current;
-    draftAudioQueueIdRef.current = null;
-    if (draftId) {
-      try { await deleteAudioTranscriptItem(draftId); } catch (_) {}
-    }
     clearDraft("field").catch(() => { });
     form.reset({ name: "", phone: "", email: "", intent_tags: [] });
     clearRecording();
@@ -316,7 +245,7 @@ export default function FieldPage() {
     submitLockRef.current = true;
     setIsSubmitting(true);
 
-    if (!audioBlob && !draftAudioQueueIdRef.current) {
+    if (!audioBlob) {
       toast.error("Voice briefing is required!", {
         description: "Please record a short note about this interaction.",
       });
@@ -333,7 +262,7 @@ export default function FieldPage() {
         submitLockRef.current = false;
         return;
       }
-      await saveContactToIndexedDBField(values);
+      await saveContactToApi(values);
     } catch (e: any) {
       console.error(e);
       toast.error(e.message || "Could not save. Please try again.");
@@ -349,7 +278,7 @@ export default function FieldPage() {
     submitLockRef.current = true;
     setIsSubmitting(true);
     try {
-      await saveContactToIndexedDBField(duplicateConfirmPending);
+      await saveContactToApi(duplicateConfirmPending);
       setDuplicateConfirmPending(null);
     } catch (e: any) {
       toast.error(e.message || "Could not save. Please try again.");
@@ -598,7 +527,7 @@ export default function FieldPage() {
                         variant="ghost"
                         size="sm"
                         className="h-8 text-[10px] font-bold uppercase text-muted-foreground hover:text-destructive transition-colors"
-                        onClick={clearRecordingAndDraft}
+                        onClick={clearRecording}
                       >
                         <Trash2 className="h-3 w-3 mr-1" /> Re-record
                       </Button>
