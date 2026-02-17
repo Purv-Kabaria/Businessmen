@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
-import { Loader2, ChevronLeft, ChevronRight, Pencil, Check, X, Download, LayoutDashboard } from "lucide-react";
+import { Loader2, ChevronLeft, ChevronRight, Pencil, Download, Mail, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
@@ -31,8 +31,29 @@ import {
     BreadcrumbPage,
     BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogFooter,
+    DialogDescription,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 type Verdict = boolean | null;
+
+type FollowupStatus = "Met" | "Email_sent" | "Closed" | "Rejected" | null;
 
 interface DealRow {
     id: string;
@@ -41,6 +62,7 @@ interface DealRow {
     dealEngaging: Verdict;
     dealWorthy: Verdict;
     dealRemarks: string | null;
+    followupStatus: FollowupStatus;
     contact: { id: string; name: string | null; phone: string; email: string | null; company: string | null };
     createdBy: { id: string; fullName: string; email: string };
 }
@@ -74,6 +96,15 @@ const worthyOptions = [
     { value: "no", label: "Not worthy" },
 ];
 
+const FOLLOWUP_NONE_VALUE = "__none__";
+const followupStatusOptions: { value: string; label: string }[] = [
+    { value: FOLLOWUP_NONE_VALUE, label: "—" },
+    { value: "Met", label: "Met" },
+    { value: "Email_sent", label: "Email sent" },
+    { value: "Closed", label: "Closed" },
+    { value: "Rejected", label: "Rejected" },
+];
+
 function verdictToValue(v: Verdict): "yes" | "no" | "unset" {
     if (v === true) return "yes";
     if (v === false) return "no";
@@ -86,29 +117,35 @@ function valueToVerdict(v: string): Verdict {
     return null;
 }
 
-function isRowSettled(row: DealRow): boolean {
-    const hasVerdict =
-        row.dealProfitable === true || row.dealProfitable === false ||
-        row.dealEngaging === true || row.dealEngaging === false ||
-        row.dealWorthy === true || row.dealWorthy === false;
-    const hasRemarks = row.dealRemarks != null && String(row.dealRemarks).trim() !== "";
-    return hasVerdict || hasRemarks;
-}
-
 export default function ModeratorDealsPage() {
     const [rows, setRows] = useState<DealRow[]>([]);
     const [pagination, setPagination] = useState<Pagination | null>(null);
     const [loading, setLoading] = useState(true);
     const [page, setPage] = useState(1);
+
+    // UI States
     const [updatingId, setUpdatingId] = useState<string | null>(null);
-    const [editingId, setEditingId] = useState<string | null>(null);
+    const [sendingEmailId, setSendingEmailId] = useState<string | null>(null);
     const [remarksDraft, setRemarksDraft] = useState<Record<string, string>>({});
     const [isExporting, setIsExporting] = useState(false);
-    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    // Admin/Edit Modal States
+    const [isAdmin, setIsAdmin] = useState(false);
+    const [editRow, setEditRow] = useState<DealRow | null>(null);
+    const [editDraft, setEditDraft] = useState<Omit<Partial<DealRow>, "contact"> & { contact?: Partial<DealRow["contact"]> } | null>(null);
+    const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+    const [deletingId, setDeletingId] = useState<string | null>(null);
 
     useEffect(() => {
         fetchDeals(page);
     }, [page]);
+
+    useEffect(() => {
+        fetch("/api/user/read", { credentials: "include" })
+            .then((r) => r.json())
+            .then((data) => { if (data?.data?.role === "ADMIN") setIsAdmin(true); })
+            .catch(() => { });
+    }, []);
 
     async function fetchDeals(p: number) {
         setLoading(true);
@@ -139,6 +176,7 @@ export default function ModeratorDealsPage() {
         try {
             const body: Record<string, unknown> = { interactionId, [field]: value };
             if (field === "dealRemarks") body.dealRemarks = value === "" ? null : value;
+
             const res = await fetch("/api/moderator/deals", {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
@@ -146,9 +184,13 @@ export default function ModeratorDealsPage() {
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data?.error?.message || "Update failed");
+
             setRows((prev) =>
                 prev.map((r) => (r.id === interactionId ? { ...r, [field]: field === "dealRemarks" ? (value as string) || null : value } : r))
             );
+
+            // Optional: visual feedback for auto-save success, though seeing the value stick is usually enough
+            // toast.success("Saved"); 
         } catch (e) {
             toast.error(e instanceof Error ? e.message : "Update failed");
         } finally {
@@ -160,58 +202,132 @@ export default function ModeratorDealsPage() {
         updateVerdict(interactionId, field, valueToVerdict(value));
     }
 
-    function handleRemarksBlur(interactionId: string) {
-        const value = remarksDraft[interactionId] ?? "";
-        const row = rows.find((r) => r.id === interactionId);
-        if (row && (row.dealRemarks ?? "") !== value) updateVerdict(interactionId, "dealRemarks", value || null);
-    }
-
-    async function saveRow(interactionId: string) {
-        const row = rows.find((r) => r.id === interactionId);
-        if (!row) return;
-        const remarks = remarksDraft[interactionId] ?? row.dealRemarks ?? "";
+    async function handleFollowupStatusChange(interactionId: string, value: FollowupStatus) {
         setUpdatingId(interactionId);
         try {
             const res = await fetch("/api/moderator/deals", {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    interactionId,
-                    dealProfitable: row.dealProfitable,
-                    dealEngaging: row.dealEngaging,
-                    dealWorthy: row.dealWorthy,
-                    dealRemarks: remarks === "" ? null : remarks,
-                }),
+                body: JSON.stringify({ interactionId, followupStatus: value }),
             });
             const data = await res.json();
-            if (!res.ok) throw new Error(data?.error?.message || "Save failed");
-            const updated = data?.data;
+            if (!res.ok) throw new Error(data?.error?.message || "Update failed");
             setRows((prev) =>
-                prev.map((r) =>
-                    r.id === interactionId
-                        ? {
-                            ...r,
-                            dealProfitable: updated?.dealProfitable ?? r.dealProfitable,
-                            dealEngaging: updated?.dealEngaging ?? r.dealEngaging,
-                            dealWorthy: updated?.dealWorthy ?? r.dealWorthy,
-                            dealRemarks: updated?.dealRemarks ?? (remarks === "" ? null : remarks),
-                        }
-                        : r
-                )
+                prev.map((r) => (r.id === interactionId ? { ...r, followupStatus: value } : r))
             );
-            setEditingId(null);
-            toast.success("Deal review saved");
         } catch (e) {
-            toast.error(e instanceof Error ? e.message : "Save failed");
+            toast.error(e instanceof Error ? e.message : "Update failed");
         } finally {
             setUpdatingId(null);
         }
     }
 
-    function cancelEdit(interactionId: string) {
+    async function handleSendEmail(row: DealRow) {
+        if (!row.contact.email?.trim()) {
+            toast.error("No email address for this contact");
+            return;
+        }
+        setSendingEmailId(row.id);
+        try {
+            const res = await fetch("/api/moderator/deals/send-email", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ interactionId: row.id }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data?.error?.message || "Send failed");
+            setRows((prev) =>
+                prev.map((r) => (r.id === row.id ? { ...r, followupStatus: "Email_sent" as const } : r))
+            );
+            toast.success(`Email sent to ${row.contact.email}`);
+        } catch (e) {
+            toast.error(e instanceof Error ? e.message : "Failed to send email");
+        } finally {
+            setSendingEmailId(null);
+        }
+    }
+
+    // Auto-save triggers on blur
+    function handleRemarksBlur(interactionId: string) {
+        const value = remarksDraft[interactionId] ?? "";
         const row = rows.find((r) => r.id === interactionId);
-        if (row) setRemarksDraft((p) => ({ ...p, [interactionId]: row.dealRemarks ?? "" }));
-        setEditingId(null);
+        // Only call API if value actually changed
+        if (row && (row.dealRemarks ?? "") !== value) {
+            updateVerdict(interactionId, "dealRemarks", value || null);
+        }
+    }
+
+    function openEditModal(row: DealRow) {
+        setEditRow(row);
+        setEditDraft({
+            ...row,
+            contact: { ...row.contact },
+        });
+    }
+
+    async function saveEditModal() {
+        if (!editRow || !editDraft) return;
+        setUpdatingId(editRow.id);
+        try {
+            const body: Record<string, unknown> = {
+                interactionId: editRow.id,
+                dealProfitable: editDraft.dealProfitable,
+                dealEngaging: editDraft.dealEngaging,
+                dealWorthy: editDraft.dealWorthy,
+                dealRemarks: editDraft.dealRemarks === "" ? null : editDraft.dealRemarks ?? null,
+                followupStatus: editDraft.followupStatus,
+                contact: editDraft.contact
+                    ? {
+                        name: editDraft.contact.name ?? null,
+                        company: editDraft.contact.company ?? null,
+                        phone: editDraft.contact.phone ?? "",
+                        email: editDraft.contact.email ?? null,
+                    }
+                    : undefined,
+            };
+            const res = await fetch("/api/moderator/deals", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(body),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data?.error?.message || "Update failed");
+            setRows((prev) =>
+                prev.map((r) =>
+                    r.id === editRow.id
+                        ? {
+                            ...r,
+                            ...editDraft,
+                            contact: { ...r.contact, ...editDraft.contact },
+                        }
+                        : r
+                )
+            );
+            setRemarksDraft((p) => ({ ...p, [editRow.id]: (editDraft.dealRemarks ?? "") as string }));
+            setEditRow(null);
+            setEditDraft(null);
+            toast.success("Entry updated");
+        } catch (e) {
+            toast.error(e instanceof Error ? e.message : "Update failed");
+        } finally {
+            setUpdatingId(null);
+        }
+    }
+
+    async function handleDeleteInteraction(interactionId: string) {
+        setDeletingId(interactionId);
+        try {
+            const res = await fetch(`/api/moderator/deals?interactionId=${encodeURIComponent(interactionId)}`, { method: "DELETE" });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data?.error?.message || "Delete failed");
+            setRows((prev) => prev.filter((r) => r.id !== interactionId));
+            setDeleteTargetId(null);
+            toast.success("Entry deleted");
+        } catch (e) {
+            toast.error(e instanceof Error ? e.message : "Delete failed");
+        } finally {
+            setDeletingId(null);
+        }
     }
 
     async function handleExportCSV() {
@@ -271,16 +387,10 @@ export default function ModeratorDealsPage() {
                         </Button>
                         <div className="min-w-0">
                             <h1 className="text-xl font-semibold">Deal review</h1>
-                            <p className="text-sm text-muted-foreground">Review interactions and add verdicts or remarks.</p>
+                            <p className="text-sm text-muted-foreground">Review interactions. Changes save automatically.</p>
                         </div>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
-                        <Link href="/admin/dashboard">
-                            <Button variant="outline" size="sm" className="gap-1.5">
-                                <LayoutDashboard className="h-4 w-4" />
-                                Admin Dashboard
-                            </Button>
-                        </Link>
                         <Button
                             variant="outline"
                             size="sm"
@@ -340,13 +450,15 @@ export default function ModeratorDealsPage() {
                                     <TableHead className="w-[140px] text-xs font-medium text-muted-foreground">Profitable</TableHead>
                                     <TableHead className="w-[140px] text-xs font-medium text-muted-foreground">Engaging</TableHead>
                                     <TableHead className="w-[140px] text-xs font-medium text-muted-foreground">Worthy</TableHead>
+                                    <TableHead className="w-[140px] text-xs font-medium text-muted-foreground">Follow-up</TableHead>
+                                    <TableHead className="w-[100px] text-xs font-medium text-muted-foreground">Email</TableHead>
                                     <TableHead className="text-xs font-medium text-muted-foreground">Remarks</TableHead>
-                                    <TableHead className="w-[140px] text-right text-xs font-medium text-muted-foreground">Actions</TableHead>
+                                    <TableHead className="w-[120px] text-right text-xs font-medium text-muted-foreground">Actions</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
                                 {rows.map((row) => (
-                                    <TableRow key={row.id} className={updatingId === row.id ? "opacity-70" : ""}>
+                                    <TableRow key={row.id} className={updatingId === row.id ? "opacity-70 transition-opacity" : "transition-opacity"}>
                                         <TableCell className="font-medium truncate max-w-[140px]" title={row.contact.name ?? row.contact.phone}>
                                             {row.contact.name || "—"}
                                         </TableCell>
@@ -412,6 +524,41 @@ export default function ModeratorDealsPage() {
                                             </Select>
                                         </TableCell>
                                         <TableCell>
+                                            <Select
+                                                value={row.followupStatus ?? FOLLOWUP_NONE_VALUE}
+                                                onValueChange={(v) => handleFollowupStatusChange(row.id, v === FOLLOWUP_NONE_VALUE ? null : (v as FollowupStatus))}
+                                                disabled={updatingId === row.id}
+                                            >
+                                                <SelectTrigger className="w-[130px] h-8">
+                                                    <SelectValue placeholder="—" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {followupStatusOptions.map((o) => (
+                                                        <SelectItem key={o.value} value={o.value}>
+                                                            {o.label}
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </TableCell>
+                                        <TableCell>
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                className="h-8 gap-1.5"
+                                                disabled={!row.contact.email?.trim() || sendingEmailId === row.id}
+                                                onClick={() => handleSendEmail(row)}
+                                                title={row.contact.email?.trim() ? `Send email to ${row.contact.email}` : "No email address"}
+                                            >
+                                                {sendingEmailId === row.id ? (
+                                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                                ) : (
+                                                    <Mail className="h-3.5 w-3.5" />
+                                                )}
+                                                Send
+                                            </Button>
+                                        </TableCell>
+                                        <TableCell>
                                             <Input
                                                 className="h-8 min-w-[140px] max-w-[220px]"
                                                 placeholder="Remarks..."
@@ -422,59 +569,35 @@ export default function ModeratorDealsPage() {
                                             />
                                         </TableCell>
                                         <TableCell className="text-right">
-                                            {editingId === row.id ? (
-                                                <div className="flex items-center justify-end gap-1">
-                                                    <Button
-                                                        size="sm"
-                                                        variant="default"
-                                                        className="h-8 gap-1"
-                                                        onClick={() => saveRow(row.id)}
-                                                        disabled={updatingId === row.id}
-                                                    >
-                                                        {updatingId === row.id ? (
-                                                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                                        ) : (
-                                                            <Check className="h-3.5 w-3.5" />
-                                                        )}
-                                                        Save
-                                                    </Button>
-                                                    <Button
-                                                        size="sm"
-                                                        variant="outline"
-                                                        className="h-8 gap-1"
-                                                        onClick={() => cancelEdit(row.id)}
-                                                        disabled={updatingId === row.id}
-                                                    >
-                                                        <X className="h-3.5 w-3.5" />
-                                                        Cancel
-                                                    </Button>
-                                                </div>
-                                            ) : isRowSettled(row) ? (
+                                            <div className="flex items-center justify-end gap-1 flex-wrap">
                                                 <Button
                                                     size="sm"
-                                                    variant="outline"
-                                                    className="h-8 gap-1"
-                                                    onClick={() => setEditingId(row.id)}
+                                                    variant="ghost"
+                                                    className="h-8 w-8 p-0"
+                                                    onClick={() => openEditModal(row)}
+                                                    disabled={updatingId === row.id}
+                                                    title="Edit details"
                                                 >
                                                     <Pencil className="h-3.5 w-3.5" />
-                                                    Edit
                                                 </Button>
-                                            ) : (
-                                                <Button
-                                                    size="sm"
-                                                    variant="default"
-                                                    className="h-8 gap-1"
-                                                    onClick={() => saveRow(row.id)}
-                                                    disabled={updatingId === row.id}
-                                                >
-                                                    {updatingId === row.id ? (
-                                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                                    ) : (
-                                                        <Check className="h-3.5 w-3.5" />
-                                                    )}
-                                                    Save
-                                                </Button>
-                                            )}
+
+                                                {isAdmin && (
+                                                    <Button
+                                                        size="sm"
+                                                        variant="ghost"
+                                                        className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                                        onClick={() => setDeleteTargetId(row.id)}
+                                                        disabled={deletingId !== null}
+                                                        title="Delete entry (Admin)"
+                                                    >
+                                                        {deletingId === row.id ? (
+                                                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                                        ) : (
+                                                            <Trash2 className="h-3.5 w-3.5" />
+                                                        )}
+                                                    </Button>
+                                                )}
+                                            </div>
                                         </TableCell>
                                     </TableRow>
                                 ))}
@@ -488,6 +611,150 @@ export default function ModeratorDealsPage() {
                         {pagination.total} interaction{pagination.total !== 1 ? "s" : ""} total
                     </p>
                 )}
+
+                {/* Edit details dialog */}
+                <Dialog open={!!editRow} onOpenChange={(open) => { if (!open) { setEditRow(null); setEditDraft(null); } }}>
+                    <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+                        <DialogHeader>
+                            <DialogTitle>Edit Deal</DialogTitle>
+                            <DialogDescription>Modify contact details and deal verdicts.</DialogDescription>
+                        </DialogHeader>
+                        {editRow && editDraft && (
+                            <div className="grid gap-4 py-4">
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <Label>Contact name</Label>
+                                        <Input
+                                            value={editDraft.contact?.name ?? ""}
+                                            onChange={(e) => setEditDraft((d) => d ? { ...d, contact: { ...d.contact, name: e.target.value || null } } : null)}
+                                            placeholder="Name"
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label>Company</Label>
+                                        <Input
+                                            value={editDraft.contact?.company ?? ""}
+                                            onChange={(e) => setEditDraft((d) => d ? { ...d, contact: { ...d.contact, company: e.target.value || null } } : null)}
+                                            placeholder="Company"
+                                        />
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <Label>Phone</Label>
+                                        <Input
+                                            value={editDraft.contact?.phone ?? ""}
+                                            onChange={(e) => setEditDraft((d) => d ? { ...d, contact: { ...d.contact, phone: e.target.value } } : null)}
+                                            placeholder="Phone"
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label>Email</Label>
+                                        <Input
+                                            type="email"
+                                            value={editDraft.contact?.email ?? ""}
+                                            onChange={(e) => setEditDraft((d) => d ? { ...d, contact: { ...d.contact, email: e.target.value || null } } : null)}
+                                            placeholder="Email"
+                                        />
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-3 gap-4">
+                                    <div className="space-y-2">
+                                        <Label>Profitable</Label>
+                                        <Select
+                                            value={verdictToValue(editDraft.dealProfitable ?? null)}
+                                            onValueChange={(v) => setEditDraft((d) => d ? { ...d, dealProfitable: valueToVerdict(v) } : null)}
+                                        >
+                                            <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
+                                            <SelectContent>
+                                                {profitableOptions.map((o) => (
+                                                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label>Engaging</Label>
+                                        <Select
+                                            value={verdictToValue(editDraft.dealEngaging ?? null)}
+                                            onValueChange={(v) => setEditDraft((d) => d ? { ...d, dealEngaging: valueToVerdict(v) } : null)}
+                                        >
+                                            <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
+                                            <SelectContent>
+                                                {engagingOptions.map((o) => (
+                                                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label>Worthy</Label>
+                                        <Select
+                                            value={verdictToValue(editDraft.dealWorthy ?? null)}
+                                            onValueChange={(v) => setEditDraft((d) => d ? { ...d, dealWorthy: valueToVerdict(v) } : null)}
+                                        >
+                                            <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
+                                            <SelectContent>
+                                                {worthyOptions.map((o) => (
+                                                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Follow-up</Label>
+                                    <Select
+                                        value={(editDraft.followupStatus ?? FOLLOWUP_NONE_VALUE) as string}
+                                        onValueChange={(v) => setEditDraft((d) => d ? { ...d, followupStatus: v === FOLLOWUP_NONE_VALUE ? null : (v as FollowupStatus) } : null)}
+                                    >
+                                        <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
+                                        <SelectContent>
+                                            {followupStatusOptions.map((o) => (
+                                                <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Remarks</Label>
+                                    <Input
+                                        value={editDraft.dealRemarks ?? ""}
+                                        onChange={(e) => setEditDraft((d) => d ? { ...d, dealRemarks: e.target.value || null } : null)}
+                                        placeholder="Remarks..."
+                                    />
+                                </div>
+                            </div>
+                        )}
+                        <DialogFooter>
+                            <Button variant="outline" onClick={() => { setEditRow(null); setEditDraft(null); }}>Cancel</Button>
+                            <Button onClick={saveEditModal} disabled={!editRow || updatingId !== null}>
+                                {updatingId === editRow?.id ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save Changes"}
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+
+                {/* Delete confirmation */}
+                <AlertDialog open={!!deleteTargetId} onOpenChange={(open) => { if (!open) setDeleteTargetId(null); }}>
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                            <AlertDialogTitle>Delete entry?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                                This will permanently delete this interaction and its deal review. This action cannot be undone.
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction
+                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                onClick={() => deleteTargetId && handleDeleteInteraction(deleteTargetId)}
+                            >
+                                Delete
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
             </div>
         </main>
     );

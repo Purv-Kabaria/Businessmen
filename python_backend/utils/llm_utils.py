@@ -229,3 +229,92 @@ JSON Response:"""
     except Exception as e:
         print(f"[LLM] Contact extraction failed: {str(e)}")
         return {"name": None, "company": None, "email": None}
+
+
+def generate_followup_email(
+    contact_name: Optional[str] = None,
+    contact_company: Optional[str] = None,
+    transcript: Optional[str] = None,
+    summary: Optional[str] = None,
+    model: str = DEFAULT_MODEL,
+) -> dict:
+    """
+    Generate a personalized follow-up email from FinIdeas using Gemma3.
+    Returns {"subject": str, "body_plain": str}. Optional transcript/summary add context.
+    """
+    company_name = "FinIdeas"
+    name = (contact_name or "").strip() or "there"
+    company = (contact_company or "").strip()
+    context = ""
+    if summary and summary.strip():
+        context = f"\nSummary of what was discussed:\n{summary.strip()}\n"
+    elif transcript and transcript.strip():
+        # Use first ~800 chars of transcript as context if no summary
+        context = f"\nBrief context from the conversation:\n{transcript.strip()[:800]}\n"
+
+    prompt = f"""You are writing a short, professional follow-up email on behalf of {company_name} (a financial ideas / business company).
+The email is for taking follow-ups after a meeting or conversation with a contact.
+
+Contact name: {name}
+Contact company: {company if company else "Not specified"}
+{context}
+
+Write exactly two parts, no other text:
+1) SUBJECT: (one short subject line for the email, no "Subject:" prefix, just the line)
+2) BODY: (2-4 short paragraphs: thank them, reference the conversation if context was given, suggest next steps or offer to schedule a follow-up, sign off as "The {company_name} Team". Keep tone warm and professional. Plain text only.)
+
+Format your response exactly like this:
+SUBJECT:
+<subject line here>
+BODY:
+<email body here>"""
+
+    try:
+        response = requests.post(
+            f"{OLLAMA_HOST}/api/generate",
+            json={
+                "model": model,
+                "prompt": prompt,
+                "stream": False,
+                "options": {
+                    "temperature": 0.4,
+                    "num_predict": 512,
+                },
+            },
+            timeout=90,
+        )
+        if response.status_code != 200:
+            return {
+                "subject": f"{company_name} – Follow-up",
+                "body_plain": f"Hi {name},\n\nThank you for connecting with us. We at {company_name} would like to follow up on our conversation. Please let us know when would be a good time to continue the discussion.\n\nBest regards,\nThe {company_name} Team",
+                "error": f"LLM returned {response.status_code}",
+            }
+        data = response.json()
+        raw = (data.get("response") or "").strip()
+        subject = f"{company_name} – Follow-up"
+        body_plain = ""
+        in_body = False
+        for line in raw.split("\n"):
+            line_stripped = line.strip()
+            if line_stripped.upper().startswith("SUBJECT:"):
+                subj = line_stripped[8:].strip()
+                if subj:
+                    subject = subj
+                continue
+            if line_stripped.upper().startswith("BODY:"):
+                in_body = True
+                rest = line_stripped[5:].strip()
+                if rest:
+                    body_plain += rest + "\n"
+                continue
+            if in_body:
+                body_plain += line + "\n"
+        body_plain = body_plain.strip() or f"Hi {name},\n\nThank you for connecting with us. We at {company_name} would like to follow up. Please reach out if you have any questions.\n\nBest regards,\nThe {company_name} Team"
+        return {"subject": subject, "body_plain": body_plain}
+    except Exception as e:
+        print(f"[LLM] Follow-up email generation failed: {str(e)}")
+        return {
+            "subject": f"{company_name} – Follow-up",
+            "body_plain": f"Hi {name},\n\nThank you for connecting with us. We at {company_name} would like to follow up on our conversation. Please let us know when would be a good time to continue.\n\nBest regards,\nThe {company_name} Team",
+            "error": str(e),
+        }

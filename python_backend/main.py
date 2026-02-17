@@ -49,6 +49,8 @@ async def root():
         "endpoints": {
             "ocr": "/api/ocr",
             "transcribe": "/api/transcribe",
+            "summarize": "/api/summarize",
+            "generate_followup_email": "/api/generate-followup-email",
             "simulate": "/api/simulation/simulate",
             "embed": "/api/simulation/embed",
             "health": "/health"

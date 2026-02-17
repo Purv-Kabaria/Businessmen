@@ -3,6 +3,25 @@
 import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import { Loader2, Search, X, ChevronLeft, Download } from "lucide-react";
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogFooter,
+    DialogDescription,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
@@ -63,6 +82,24 @@ export default function AudioReviewPage() {
         email: string | null;
     } | null>(null);
     const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
+
+    const [isAdmin, setIsAdmin] = useState(false);
+    const [adminEditInteraction, setAdminEditInteraction] = useState<AudioInteraction | null>(null);
+    const [adminEditDraft, setAdminEditDraft] = useState<{
+        contact: { name: string | null; company: string | null; email: string | null; phone: string };
+        transcript: string | null;
+        summary: string | null;
+    } | null>(null);
+    const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+    const [deletingId, setDeletingId] = useState<string | null>(null);
+    const [adminSavingId, setAdminSavingId] = useState<string | null>(null);
+
+    useEffect(() => {
+        fetch("/api/user/read", { credentials: "include" })
+            .then((r) => r.json())
+            .then((data) => { if (data?.data?.role === "ADMIN") setIsAdmin(true); })
+            .catch(() => {});
+    }, []);
 
     useEffect(() => {
         const timer = setTimeout(() => {
@@ -339,6 +376,80 @@ export default function AudioReviewPage() {
         }
     }
 
+    function openAdminEdit(interaction: AudioInteraction) {
+        setAdminEditInteraction(interaction);
+        const snapshot = interaction.structuredSnapshot as { summary?: string } | null;
+        setAdminEditDraft({
+            contact: {
+                name: interaction.contact.name ?? null,
+                company: interaction.contact.company ?? null,
+                email: interaction.contact.email ?? null,
+                phone: interaction.contact.phone ?? "",
+            },
+            transcript: interaction.transcript ?? null,
+            summary: snapshot?.summary ?? null,
+        });
+    }
+
+    async function saveAdminEdit() {
+        if (!adminEditInteraction || !adminEditDraft) return;
+        setAdminSavingId(adminEditInteraction.id);
+        try {
+            const snapshot = { ...(adminEditInteraction.structuredSnapshot || {}), summary: adminEditDraft.summary ?? undefined };
+            const res = await fetch("/api/interactions/audio", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    interactionId: adminEditInteraction.id,
+                    transcript: adminEditDraft.transcript,
+                    structuredSnapshot: Object.keys(snapshot).length ? snapshot : undefined,
+                    contact: adminEditDraft.contact,
+                }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data?.error?.message || "Update failed");
+            setInteractions((prev) =>
+                prev.map((i) =>
+                    i.id === adminEditInteraction.id
+                        ? {
+                            ...i,
+                            transcript: adminEditDraft!.transcript,
+                            structuredSnapshot: { ...(i.structuredSnapshot || {}), summary: adminEditDraft!.summary ?? undefined },
+                            contact: { ...i.contact, ...adminEditDraft!.contact },
+                        }
+                        : i
+                )
+            );
+            setAdminEditInteraction(null);
+            setAdminEditDraft(null);
+            toast.success("Entry updated");
+        } catch (e) {
+            toast.error(e instanceof Error ? e.message : "Update failed");
+        } finally {
+            setAdminSavingId(null);
+        }
+    }
+
+    async function handleDeleteInteraction(interactionId: string) {
+        setDeletingId(interactionId);
+        try {
+            const res = await fetch(`/api/interactions/audio?interactionId=${encodeURIComponent(interactionId)}`, { method: "DELETE" });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data?.error?.message || "Delete failed");
+            setInteractions((prev) => prev.filter((i) => i.id !== interactionId));
+            setDeleteTargetId(null);
+            if (currentTrack?.id === interactionId) {
+                setCurrentTrack(null);
+                setIsPlaying(false);
+            }
+            toast.success("Entry deleted");
+        } catch (e) {
+            toast.error(e instanceof Error ? e.message : "Delete failed");
+        } finally {
+            setDeletingId(null);
+        }
+    }
+
     // Audio Player Effects & Handlers
     useEffect(() => {
         if (currentTrack && audioRef.current) {
@@ -565,6 +676,10 @@ export default function AudioReviewPage() {
                                 isTranscribing={transcribingId === interaction.id}
                                 selectedAudioIndex={selectedAudioIndices[interaction.id] || 0}
                                 setSelectedAudioIndex={(idx) => setSelectedAudioIndices(prev => ({ ...prev, [interaction.id]: idx }))}
+                                isAdmin={isAdmin}
+                                onAdminEdit={openAdminEdit}
+                                onDelete={(i) => setDeleteTargetId(i.id)}
+                                isDeleting={deletingId === interaction.id}
                             />
                         ))}
                     </div>
@@ -629,6 +744,101 @@ export default function AudioReviewPage() {
                 setSuggestedUpdate={setSuggestedUpdate}
                 onUpdate={handleUpdateContact}
             />
+
+            {/* Admin edit dialog */}
+            <Dialog open={!!adminEditInteraction} onOpenChange={(open) => { if (!open) { setAdminEditInteraction(null); setAdminEditDraft(null); } }}>
+                <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle>Admin: Edit entry</DialogTitle>
+                        <DialogDescription>Edit contact and transcript/summary. Changes apply to this interaction.</DialogDescription>
+                    </DialogHeader>
+                    {adminEditDraft && (
+                        <div className="grid gap-4 py-4">
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <Label>Contact name</Label>
+                                    <Input
+                                        value={adminEditDraft.contact.name ?? ""}
+                                        onChange={(e) => setAdminEditDraft((d) => d ? { ...d, contact: { ...d.contact, name: e.target.value || null } } : null)}
+                                        placeholder="Name"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Company</Label>
+                                    <Input
+                                        value={adminEditDraft.contact.company ?? ""}
+                                        onChange={(e) => setAdminEditDraft((d) => d ? { ...d, contact: { ...d.contact, company: e.target.value || null } } : null)}
+                                        placeholder="Company"
+                                    />
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <Label>Phone</Label>
+                                    <Input
+                                        value={adminEditDraft.contact.phone}
+                                        onChange={(e) => setAdminEditDraft((d) => d ? { ...d, contact: { ...d.contact, phone: e.target.value } } : null)}
+                                        placeholder="Phone"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Email</Label>
+                                    <Input
+                                        type="email"
+                                        value={adminEditDraft.contact.email ?? ""}
+                                        onChange={(e) => setAdminEditDraft((d) => d ? { ...d, contact: { ...d.contact, email: e.target.value || null } } : null)}
+                                        placeholder="Email"
+                                    />
+                                </div>
+                            </div>
+                            <div className="space-y-2">
+                                <Label>Transcript</Label>
+                                <textarea
+                                    className="flex min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                                    value={adminEditDraft.transcript ?? ""}
+                                    onChange={(e) => setAdminEditDraft((d) => d ? { ...d, transcript: e.target.value || null } : null)}
+                                    placeholder="Transcript..."
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label>Summary</Label>
+                                <textarea
+                                    className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                                    value={adminEditDraft.summary ?? ""}
+                                    onChange={(e) => setAdminEditDraft((d) => d ? { ...d, summary: e.target.value || null } : null)}
+                                    placeholder="Summary..."
+                                />
+                            </div>
+                        </div>
+                    )}
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => { setAdminEditInteraction(null); setAdminEditDraft(null); }}>Cancel</Button>
+                        <Button onClick={saveAdminEdit} disabled={!adminEditInteraction || adminSavingId !== null}>
+                            {adminSavingId === adminEditInteraction?.id ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            <AlertDialog open={!!deleteTargetId} onOpenChange={(open) => { if (!open) setDeleteTargetId(null); }}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Delete entry?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            This will permanently delete this interaction and its audio/transcript data. This action cannot be undone.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            onClick={() => deleteTargetId && handleDeleteInteraction(deleteTargetId)}
+                        >
+                            Delete
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     );
 }

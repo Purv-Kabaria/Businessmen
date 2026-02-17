@@ -3,7 +3,7 @@
 import { format } from "date-fns";
 import {
     Calendar, User, Phone, Building2, Mail, Tag,
-    Play, Pause, Wand2, Loader2, FileText, ChevronRight, ListOrdered
+    Play, Pause, Wand2, Loader2, FileText, ChevronRight, ListOrdered, Shield, Trash2
 } from "lucide-react";
 import Link from 'next/link';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
@@ -24,6 +24,10 @@ interface AudioInteractionCardProps {
     isTranscribing: boolean;
     selectedAudioIndex: number;
     setSelectedAudioIndex: (index: number) => void;
+    isAdmin?: boolean;
+    onAdminEdit?: (interaction: AudioInteraction) => void;
+    onDelete?: (interaction: AudioInteraction) => void;
+    isDeleting?: boolean;
 }
 
 export function AudioInteractionCard({
@@ -35,7 +39,11 @@ export function AudioInteractionCard({
     isPlaying,
     isTranscribing,
     selectedAudioIndex,
-    setSelectedAudioIndex
+    setSelectedAudioIndex,
+    isAdmin,
+    onAdminEdit,
+    onDelete,
+    isDeleting,
 }: AudioInteractionCardProps) {
     const displayTranscript = interaction.transcript;
     const isCurrentTrackPlaying = isPlaying(interaction.id);
@@ -115,6 +123,31 @@ export function AudioInteractionCard({
                         </div>
 
                         <div className="flex flex-wrap items-center gap-2">
+                            {isAdmin && onAdminEdit && (
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-8 text-xs"
+                                    onClick={() => onAdminEdit(interaction)}
+                                    title="Edit all fields (Admin)"
+                                >
+                                    <Shield className="h-3 w-3 mr-1.5" />
+                                    Admin edit
+                                </Button>
+                            )}
+                            {isAdmin && onDelete && (
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-8 text-xs text-destructive border-destructive/50 hover:bg-destructive/10"
+                                    onClick={() => onDelete(interaction)}
+                                    disabled={isDeleting}
+                                    title="Delete entry (Admin)"
+                                >
+                                    {isDeleting ? <Loader2 className="h-3 w-3 animate-spin mr-1.5" /> : <Trash2 className="h-3 w-3 mr-1.5" />}
+                                    Delete
+                                </Button>
+                            )}
                             <Button
                                 variant="outline"
                                 size="sm"

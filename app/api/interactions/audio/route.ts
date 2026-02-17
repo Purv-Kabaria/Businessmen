@@ -202,8 +202,8 @@ export async function PATCH(req: NextRequest) {
         }
 
         // 2. Parse request body
-        const body = await req.json();
-        const { interactionId, transcript, structuredSnapshot } = body;
+        const body = await req.json().catch(() => ({}));
+        const { interactionId, transcript, structuredSnapshot, contact: contactUpdate } = body;
 
         if (!interactionId) {
             return NextResponse.json(
@@ -261,6 +261,54 @@ export async function PATCH(req: NextRequest) {
                     message: error instanceof Error ? error.message : "Failed to update transcription",
                 },
             },
+            { status: 500 }
+        );
+    }
+}
+
+export async function DELETE(req: NextRequest) {
+    try {
+        const token = req.cookies.get("token")?.value;
+        if (!token) {
+            return NextResponse.json(
+                { success: false, error: { message: "Unauthorized" } },
+                { status: 401 }
+            );
+        }
+        const jwtSecret = process.env.JWT_SECRET;
+        if (!jwtSecret) {
+            return NextResponse.json(
+                { success: false, error: { message: "Server configuration error" } },
+                { status: 500 }
+            );
+        }
+        const secret = new TextEncoder().encode(jwtSecret);
+        const { payload } = await jwtVerify(token, secret);
+        const userRole = (payload as any).role;
+        if (userRole !== "ADMIN") {
+            return NextResponse.json(
+                { success: false, error: { message: "Admin only" } },
+                { status: 403 }
+            );
+        }
+        const { searchParams } = new URL(req.url);
+        const interactionId = searchParams.get("interactionId");
+        if (!interactionId) {
+            return NextResponse.json(
+                { success: false, error: { message: "interactionId is required" } },
+                { status: 400 }
+            );
+        }
+        await prisma.aiJob.deleteMany({ where: { interactionId } });
+        await prisma.interaction.delete({ where: { id: interactionId } });
+        return NextResponse.json({ success: true, data: { deleted: true, id: interactionId } });
+    } catch (error: any) {
+        if (error?.code === "P2025") {
+            return NextResponse.json({ success: false, error: { message: "Interaction not found" } }, { status: 404 });
+        }
+        console.error("[API /api/interactions/audio] DELETE Error:", error);
+        return NextResponse.json(
+            { success: false, error: { message: error.message || "Failed to delete" } },
             { status: 500 }
         );
     }

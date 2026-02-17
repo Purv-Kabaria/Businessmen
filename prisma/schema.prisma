@@ -7,24 +7,16 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum Role {
-  USER
-  MODERATOR
-  ADMIN
-}
-
 model User {
-  id        String   @id @default(cuid())
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  email    String @unique
-  fullName String @map("full_name")
-  password String
-  role     Role   @default(USER)
-
-  passwordResetTokens PasswordResetToken[]
+  id                  String               @id @default(cuid())
+  createdAt           DateTime             @default(now()) @map("created_at")
+  updatedAt           DateTime             @updatedAt @map("updated_at")
+  email               String               @unique
+  fullName            String               @map("full_name")
+  password            String
+  role                Role                 @default(USER)
   interactions        Interaction[]        @relation("CreatedBy")
+  passwordResetTokens PasswordResetToken[]
 
   @@map("users")
 }
@@ -34,50 +26,51 @@ model PasswordResetToken {
   token     String   @unique
   createdAt DateTime @default(now()) @map("created_at")
   expiresAt DateTime @map("expires_at")
-
-  userId String @map("user_id")
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("password_reset_tokens")
 }
 
 model Contact {
+  id             String        @id @default(uuid())
+  name           String?
+  email          String?
+  phone          String        @unique
+  currentStage   String        @default("Met") @map("current_stage")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+  company        String?
+  deviceId       String?
+  eventId        String?
+  intentTags     Json?
+  pendingSync    Boolean       @default(true)
+  sourceMode     String        @default("manual")
+  version        Int           @default(1)
+  offlineLocalId String?       @unique @map("offline_local_id")
+  followups      FollowUp[]
+  interactions   Interaction[]
+
   @@map("contacts")
-  id           String        @id @default(uuid())
-  name         String?
-  email        String?
-  phone        String        @unique
-  currentStage String        @default("Met") @map("current_stage")
-  createdAt    DateTime      @default(now()) @map("created_at")
-  updatedAt    DateTime      @updatedAt @map("updated_at")
-  interactions Interaction[]
-  followups    FollowUp[]
-  company     String?
-  intentTags  Json?
-  sourceMode  String   @default("manual")
-  eventId     String?
-  deviceId    String?
-  version        Int      @default(1)
-  pendingSync    Boolean  @default(true)
-  offlineLocalId String?  @unique @map("offline_local_id")
 }
 
 model Interaction {
   id                 String   @id @default(uuid())
   contactId          String   @map("contact_id")
-  contact            Contact  @relation(fields: [contactId], references: [id])
-  audioObjectKeys    String[] @default([]) @map("audio_object_keys")
   transcript         String?
   structuredSnapshot Json?    @map("structured_snapshot")
   tags               Json?
   createdBy          String   @map("created_by")
-  createdByUser      User     @relation("CreatedBy", fields: [createdBy], references: [id])
   createdAt          DateTime @default(now()) @map("created_at")
+  audioObjectKeys    String[] @default([]) @map("audio_object_keys")
   dealProfitable     Boolean? @map("deal_profitable")
   dealEngaging       Boolean? @map("deal_engaging")
   dealWorthy         Boolean? @map("deal_worthy")
   dealRemarks        String?  @map("deal_remarks")
+  followupStatus     String?  @map("followup_status")
   aiJobs             AiJob[]
+  contact            Contact  @relation(fields: [contactId], references: [id])
+  createdByUser      User     @relation("CreatedBy", fields: [createdBy], references: [id])
 
   @@map("interactions")
 }
@@ -85,10 +78,10 @@ model Interaction {
 model FollowUp {
   id        String   @id @default(uuid())
   contactId String   @map("contact_id")
-  contact   Contact  @relation(fields: [contactId], references: [id])
   dueDate   DateTime @map("due_date")
   status    String   @default("Pending")
   createdAt DateTime @default(now()) @map("created_at")
+  contact   Contact  @relation(fields: [contactId], references: [id])
 
   @@map("follow_ups")
 }
@@ -96,10 +89,16 @@ model FollowUp {
 model AiJob {
   id            String      @id @default(uuid())
   interactionId String      @map("interaction_id")
-  interaction   Interaction @relation(fields: [interactionId], references: [id])
   status        String      @default("pending")
   retryCount    Int         @default(0) @map("retry_count")
   createdAt     DateTime    @default(now()) @map("created_at")
+  interaction   Interaction @relation(fields: [interactionId], references: [id])
 
   @@map("ai_jobs")
+}
+
+enum Role {
+  USER
+  MODERATOR
+  ADMIN
 }

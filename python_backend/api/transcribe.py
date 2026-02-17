@@ -5,7 +5,15 @@ import os
 import requests
 from pydantic import BaseModel
 
-from api.models import TranscriptionResponse, SummarizeRequest, SummarizeResponse, ExtractContactRequest, ExtractContactResponse
+from api.models import (
+    TranscriptionResponse,
+    SummarizeRequest,
+    SummarizeResponse,
+    ExtractContactRequest,
+    ExtractContactResponse,
+    GenerateFollowupEmailRequest,
+    GenerateFollowupEmailResponse,
+)
 from utils.whisper_utils import whisper_model
 from utils.audio_preprocess import preprocess_audio
 
@@ -271,3 +279,60 @@ async def extract_contact_from_text(req: ExtractContactRequest):
     except Exception as e:
         print(f"[ExtractContact] Error: {str(e)}")
         return ExtractContactResponse(success=False, data=None, error=str(e))
+
+
+@router.post("/generate-followup-email", response_model=GenerateFollowupEmailResponse)
+async def generate_followup_email(req: GenerateFollowupEmailRequest):
+    """
+    Generate a personalized follow-up email from FinIdeas using Gemma3 (Ollama).
+    Used for deal review follow-ups.
+    """
+    try:
+        from utils.llm_utils import generate_followup_email as llm_generate_followup_email
+
+        result = llm_generate_followup_email(
+            contact_name=req.contact_name,
+            contact_company=req.contact_company,
+            transcript=req.transcript,
+            summary=req.summary,
+            model=req.model or "gemma3:4b",
+        )
+        subject = result.get("subject") or "FinIdeas – Follow-up"
+        body_plain = result.get("body_plain") or ""
+        body_html = _plain_to_html(body_plain) if body_plain else None
+        return GenerateFollowupEmailResponse(
+            success=True,
+            subject=subject,
+            body_plain=body_plain,
+            body_html=body_html,
+            error=result.get("error"),
+        )
+    except Exception as e:
+        print(f"[GenerateFollowupEmail] Error: {str(e)}")
+        return GenerateFollowupEmailResponse(
+            success=False,
+            subject=None,
+            body_plain=None,
+            body_html=None,
+            error=str(e),
+        )
+
+
+def _plain_to_html(plain: str) -> str:
+    """Convert plain text email body to simple HTML (paragraphs)."""
+    if not plain or not plain.strip():
+        return ""
+    paragraphs = [p.strip() for p in plain.split("\n\n") if p.strip()]
+    if not paragraphs:
+        return f"<p>{plain.replace(chr(10), '<br/>')}</p>"
+    return "".join(f"<p>{_escape_html(p).replace(chr(10), '<br/>')}</p>" for p in paragraphs)
+
+
+def _escape_html(s: str) -> str:
+    return (
+        s.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+        .replace("'", "&#39;")
+    )
