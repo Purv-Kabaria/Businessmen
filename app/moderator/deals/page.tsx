@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
-import { Loader2, ArrowLeft, TrendingUp, Heart, Award, FileText, ChevronLeft, ChevronRight, Pencil, Check, X } from "lucide-react";
+import { Loader2, ArrowLeft, TrendingUp, Heart, Award, FileText, ChevronLeft, ChevronRight, Pencil, Check, X, Download } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
@@ -103,6 +103,8 @@ export default function ModeratorDealsPage() {
     const [updatingId, setUpdatingId] = useState<string | null>(null);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [remarksDraft, setRemarksDraft] = useState<Record<string, string>>({});
+    const [isExporting, setIsExporting] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
         fetchDeals(page);
@@ -212,6 +214,25 @@ export default function ModeratorDealsPage() {
         setEditingId(null);
     }
 
+    async function handleExportCSV() {
+        setIsExporting(true);
+        try {
+            const response = await fetch("/api/moderator/deals/export/csv", { credentials: "include" });
+            if (!response.ok) throw new Error("Export failed");
+            const blob = await response.blob();
+            const a = document.createElement("a");
+            a.href = URL.createObjectURL(blob);
+            a.download = `deal_reviews_${new Date().toISOString().split("T")[0]}.csv`;
+            a.click();
+            URL.revokeObjectURL(a.href);
+            toast.success("CSV downloaded");
+        } catch (e) {
+            toast.error(e instanceof Error ? e.message : "Failed to download CSV");
+        } finally {
+            setIsExporting(false);
+        }
+    }
+
     return (
         <main className="min-h-screen bg-background p-4 sm:p-6 md:p-8">
             <div className="mx-auto max-w-7xl">
@@ -247,8 +268,19 @@ export default function ModeratorDealsPage() {
                             <p className="text-sm text-muted-foreground">Mark interactions as profitable, engaging, worthy and add remarks.</p>
                         </div>
                     </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-1.5"
+                        onClick={handleExportCSV}
+                        disabled={isExporting}
+                    >
+                        {isExporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                        Download CSV
+                    </Button>
                     {pagination && (
-                        <div className="flex items-center gap-2">
+                        <>
                             <Button
                                 variant="outline"
                                 size="sm"
@@ -268,8 +300,9 @@ export default function ModeratorDealsPage() {
                             >
                                 <ChevronRight className="h-4 w-4" />
                             </Button>
-                        </div>
-                    )}
+                        </>
+                        )}
+                    </div>
                 </div>
 
                 <div className="rounded-xl border bg-card overflow-hidden">
