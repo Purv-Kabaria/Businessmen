@@ -19,7 +19,10 @@
     "dev:shared": "dotenv -e .env.shared.dev -- next dev --turbo -p 3000",
     "dev:local": "dotenv -e .env.local.dev -- next dev --turbo -p 3001",
     "dev:both": "concurrently \"pnpm dev:shared\" \"pnpm dev:local\"",
-    "dev:offline": "dotenv -e .env.local.dev -- next dev --turbo -H 0.0.0.0 -p 3001"
+    "dev:offline": "dotenv -e .env.local.dev -- next dev --turbo -H 0.0.0.0 -p 3001",
+    "worker:contacts": "dotenv -- tsx workers/contacts-sync-worker.ts",
+    "worker:audio": "dotenv -- tsx workers/audio-transcript-worker.ts",
+    "workers": "concurrently \"pnpm worker:contacts\" \"pnpm worker:audio\""
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.500.0",
@@ -53,6 +56,8 @@
     "@radix-ui/react-toggle-group": "^1.1.11",
     "@radix-ui/react-tooltip": "^1.2.8",
     "@tanstack/react-table": "^8.21.3",
+    "@upstash/redis": "^1.36.2",
+    "bullmq": "^5.69.2",
     "bcryptjs": "^3.0.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -63,6 +68,7 @@
     "embla-carousel-react": "^8.6.0",
     "framer-motion": "^12.23.24",
     "input-otp": "^1.4.2",
+    "ioredis": "^5.9.3",
     "jose": "^6.1.0",
     "jsonwebtoken": "^9.0.2",
     "lucide-react": "^0.552.0",

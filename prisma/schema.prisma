@@ -57,8 +57,9 @@ model Contact {
   sourceMode  String   @default("manual")
   eventId     String?
   deviceId    String?
-  version     Int      @default(1)
-  pendingSync Boolean  @default(true)
+  version        Int      @default(1)
+  pendingSync    Boolean  @default(true)
+  offlineLocalId String?  @unique @map("offline_local_id")
 }
 
 model Interaction {
