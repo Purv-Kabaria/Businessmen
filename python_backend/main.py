@@ -5,6 +5,13 @@ import requests
 
 from api.ocr import router as ocr_router
 from api.transcribe import router as transcribe_router
+from api.transcribe import generate_followup_email, classify_meeting_reply
+from api.models import (
+    GenerateFollowupEmailRequest,
+    GenerateFollowupEmailResponse,
+    ClassifyMeetingReplyRequest,
+    ClassifyMeetingReplyResponse,
+)
 from api.simulation import router as simulation_router
 from utils.whisper_utils import whisper_model
 
@@ -28,6 +35,22 @@ app.add_middleware(
 app.include_router(ocr_router, prefix="/api", tags=["OCR"])
 app.include_router(transcribe_router, prefix="/api", tags=["Transcription"])
 app.include_router(simulation_router, prefix="/api/simulation", tags=["Simulation"])
+
+# Ensure follow-up and meeting-reply endpoints are registered (avoids 404 if router mount differs)
+app.add_api_route(
+    "/api/generate-followup-email",
+    generate_followup_email,
+    methods=["POST"],
+    response_model=GenerateFollowupEmailResponse,
+    tags=["Transcription"],
+)
+app.add_api_route(
+    "/api/classify-meeting-reply",
+    classify_meeting_reply,
+    methods=["POST"],
+    response_model=ClassifyMeetingReplyResponse,
+    tags=["Transcription"],
+)
 
 
 @app.get("/")

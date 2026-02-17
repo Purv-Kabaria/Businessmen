@@ -49,6 +49,8 @@ class GenerateFollowupEmailRequest(BaseModel):
     contact_company: Optional[str] = None
     transcript: Optional[str] = None
     summary: Optional[str] = None
+    """Action items or key points from the conversation for personalization."""
+    action_items: Optional[list[str]] = None
     model: Optional[str] = "gemma3:4b"
 
 
@@ -57,4 +59,21 @@ class GenerateFollowupEmailResponse(BaseModel):
     subject: Optional[str] = None
     body_plain: Optional[str] = None
     body_html: Optional[str] = None
+    error: Optional[str] = None
+
+
+class ClassifyMeetingReplyRequest(BaseModel):
+    reply_text: str
+    original_subject: Optional[str] = None
+    model: Optional[str] = "gemma3:4b"
+    """Current date/time in ISO format so the LLM knows 'today', 'tomorrow', etc."""
+    current_datetime: Optional[str] = None
+    """List of free slots {start, end} (ISO strings) so the LLM knows what is available."""
+    free_slots: Optional[list[dict]] = None
+
+
+class ClassifyMeetingReplyResponse(BaseModel):
+    success: bool
+    wants_meeting: bool
+    suggested_times: Optional[list[str]] = None
     error: Optional[str] = None

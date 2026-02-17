@@ -9,7 +9,6 @@ import {
     verifySession,
 } from "@/lib/api-utils";
 import { normalizePhone } from "@/modules/capture/utils";
-import { findContactByPhoneLast10 } from "@/lib/contact-lookup";
 import { randomUUID } from "node:crypto";
 
 type ContactDelegate = {
@@ -17,10 +16,7 @@ type ContactDelegate = {
     create: (args: { data: Record<string, unknown> }) => Promise<{ id: string }>;
 };
 type InteractionDelegate = {
-    findFirst: (args: {
-        where: { contactId: string; createdBy?: string };
-        orderBy?: { createdAt: "desc" };
-    }) => Promise<{ id: string; audioObjectKeys: string[] } | null>;
+    findFirst: (args: { where: { contactId: string }; orderBy: { createdAt: "desc" } }) => Promise<{ id: string; audioObjectKeys: string[] } | null>;
     update: (args: { where: { id: string }; data: { audioObjectKeys: string[] } }) => Promise<{ id: string; audioObjectKeys: string[] }>;
     create: (args: { data: Record<string, unknown> }) => Promise<{ id: string; audioObjectKeys: string[] }>;
 };
@@ -56,11 +52,13 @@ export async function POST(req: Request) {
             }
             contact_id = existing.id;
         } else if (phone) {
-            const existingByLast10 = await findContactByPhoneLast10(phone);
-            if (existingByLast10) {
-                contact_id = existingByLast10.id;
+            const normalizedPhone = normalizePhone(phone);
+            const existingByPhone = await client.contact.findUnique({
+                where: { phone: normalizedPhone },
+            });
+            if (existingByPhone) {
+                contact_id = existingByPhone.id;
             } else {
-                const normalizedPhone = normalizePhone(phone);
                 const newContact = await client.contact.create({
                     data: {
                         name: contact_name || "Unknown",
@@ -74,18 +72,6 @@ export async function POST(req: Request) {
             }
         } else {
             return createErrorResponse("MISSING_CONTACT_ID", "Contact ID or phone is required.", 400);
-        }
-
-        const existingInteractionByUser = await client.interaction.findFirst({
-            where: { contactId: contact_id, createdBy: session.id },
-            orderBy: { createdAt: "desc" },
-        });
-        if (existingInteractionByUser) {
-            return createErrorResponse(
-                "ALREADY_INTERACTED",
-                "You have already interacted with this contact.",
-                409
-            );
         }
 
         const audio_upload_id = randomUUID();
@@ -127,6 +113,24 @@ export async function POST(req: Request) {
 
         const result = await client.$transaction(async (tx) => {
             const txClient = tx as PrismaWithModels;
+            const existingInteraction = await txClient.interaction.findFirst({
+                where: { contactId: contact_id },
+                orderBy: { createdAt: "desc" },
+            });
+
+            if (existingInteraction && audio_object_key) {
+                await txClient.interaction.update({
+                    where: { id: existingInteraction.id },
+                    data: {
+                        audioObjectKeys: [...existingInteraction.audioObjectKeys, audio_object_key],
+                    },
+                });
+                return {
+                    interaction: { ...existingInteraction, audioObjectKeys: [...existingInteraction.audioObjectKeys, audio_object_key] },
+                    ai_job: null as { id: string } | null,
+                };
+            }
+
             const new_interaction_id = randomUUID();
             const interaction = await txClient.interaction.create({
                 data: {
@@ -155,7 +159,7 @@ export async function POST(req: Request) {
         return createSuccessResponse({
             interaction_id: result.interaction.id,
             ai_job_id: result.ai_job?.id ?? null,
-            status: "Interaction created and AI job scheduled",
+            status: result.ai_job ? "Interaction created and AI job scheduled" : "Audio appended to existing interaction",
         });
     } catch (error) {
         return handleUnexpectedError(error, "CREATE_INTERACTION");
