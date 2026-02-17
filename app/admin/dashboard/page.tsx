@@ -234,6 +234,26 @@ export default function AdminDashboardPage() {
                             </Link>
                         </motion.div>
                         <motion.div variants={itemVariants}>
+                            <Link href="/admin/users?role=MODERATOR">
+                                <Card className="h-full transition-colors hover:border-primary hover:bg-accent/50">
+                                    <CardHeader>
+                                        <CardTitle className="flex items-center gap-2 text-base">
+                                            <Shield className="h-5 w-5 text-primary" />
+                                            Moderators
+                                        </CardTitle>
+                                    </CardHeader>
+                                    <CardContent>
+                                        <p className="text-sm text-muted-foreground">
+                                            View and manage moderator accounts and roles.
+                                        </p>
+                                        <span className="mt-2 inline-flex items-center gap-1 text-sm font-medium text-primary">
+                                            Open <ExternalLink className="h-3.5 w-3" />
+                                        </span>
+                                    </CardContent>
+                                </Card>
+                            </Link>
+                        </motion.div>
+                        <motion.div variants={itemVariants}>
                             <Link href="/admin/contacts">
                                 <Card className="h-full transition-colors hover:border-primary hover:bg-accent/50">
                                     <CardHeader>
