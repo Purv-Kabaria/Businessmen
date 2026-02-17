@@ -7,7 +7,7 @@ type PrismaWithInteraction = typeof prisma & {
     interaction: {
         findMany: (args: { where: { audioObjectKeys: { isEmpty: false } }; include: { contact: { select: { id: true; name: true; phone: true; email: true; company: true } }; createdByUser: { select: { id: true; fullName: true; email: true } } }; orderBy: { createdAt: "desc" }; skip: number; take: number }) => Promise<DealRow[]>;
         count: (args: { where: { audioObjectKeys: { isEmpty: false } } }) => Promise<number>;
-        update: (args: { where: { id: string }; data: { dealProfitable?: boolean | null; dealEngaging?: boolean | null; dealWorthy?: boolean | null; dealRemarks?: string | null }; select: { id: true; dealProfitable: true; dealEngaging: true; dealWorthy: true; dealRemarks: true } }) => Promise<{ id: string; dealProfitable: boolean | null; dealEngaging: boolean | null; dealWorthy: boolean | null; dealRemarks: string | null }>;
+        update: (args: { where: { id: string }; data: { dealProfitable?: boolean | null; dealEngaging?: boolean | null; dealWorthy?: boolean | null; dealRemarks?: string | null; followupStatus?: string | null }; select: { id: true; dealProfitable: true; dealEngaging: true; dealWorthy: true; dealRemarks: true; followupStatus: true } }) => Promise<{ id: string; dealProfitable: boolean | null; dealEngaging: boolean | null; dealWorthy: boolean | null; dealRemarks: string | null; followupStatus: string | null }>;
     };
 };
 type DealRow = {
@@ -17,6 +17,7 @@ type DealRow = {
     dealEngaging: boolean | null;
     dealWorthy: boolean | null;
     dealRemarks: string | null;
+    followupStatus: string | null;
     contact: { id: string; name: string | null; phone: string; email: string | null; company: string | null };
     createdByUser: { id: string; fullName: string | null; email: string };
 };
@@ -72,7 +73,7 @@ export async function GET(req: NextRequest) {
             dealEngaging: r.dealEngaging,
             dealWorthy: r.dealWorthy,
             dealRemarks: r.dealRemarks,
-            followupStatus: (r as { followupStatus?: string | null }).followupStatus ?? null,
+            followupStatus: r.followupStatus,
             contact: r.contact,
             createdBy: r.createdByUser,
         }));
@@ -135,22 +136,14 @@ export async function PATCH(req: NextRequest) {
             }
         }
 
-        const followupStatusValue = update.followupStatus;
-        const { followupStatus: _fs, ...dealUpdate } = update;
-
-        if (followupStatusValue !== undefined) {
-            await prisma.$executeRaw`UPDATE interactions SET followup_status = ${followupStatusValue} WHERE id = ${interactionId}`;
-        }
-
         const client = prisma as PrismaWithInteraction;
         const interaction = await client.interaction.update({
             where: { id: interactionId },
-            data: dealUpdate,
-            select: { id: true, dealProfitable: true, dealEngaging: true, dealWorthy: true, dealRemarks: true },
+            data: update,
+            select: { id: true, dealProfitable: true, dealEngaging: true, dealWorthy: true, dealRemarks: true, followupStatus: true },
         });
-        const result = { ...interaction, followupStatus: followupStatusValue ?? null };
 
-        return createSuccessResponse(result);
+        return createSuccessResponse(interaction);
     } catch (error: unknown) {
         if (error && typeof error === "object" && "code" in error && (error as { code: string }).code === "P2025") {
             return createErrorResponse("NOT_FOUND", "Interaction not found", 404);

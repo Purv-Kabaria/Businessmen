@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import Link from "next/link";
 import { Loader2, Search, X, ChevronLeft, Download } from "lucide-react";
 import {
@@ -48,8 +48,57 @@ import {
     PaginationInfo,
     TrackInfo
 } from "@/types/audio-review";
+import { phoneLast10 } from "@/modules/capture/utils";
 
 const TRANSCRIBE_API_URL = process.env.NEXT_PUBLIC_TRANSCRIBE_API_URL || 'http://localhost:8000';
+
+function mergeInteractionsByContact(items: AudioInteraction[]): AudioInteraction[] {
+    const byContact = new Map<string, AudioInteraction[]>();
+    for (const item of items) {
+        const key = phoneLast10(item.contact.phone);
+        if (key.length < 10) {
+            byContact.set(item.id, [item]);
+            continue;
+        }
+        const list = byContact.get(key) ?? [];
+        list.push(item);
+        byContact.set(key, list);
+    }
+    const result: AudioInteraction[] = [];
+    for (const group of byContact.values()) {
+        if (group.length === 1) {
+            result.push(group[0]);
+            continue;
+        }
+        const sorted = [...group].sort(
+            (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+        );
+        const first = sorted[0];
+        const audioUrls: (string | null)[] = [];
+        const audioObjectKeys: string[] = [];
+        const interactionIdByAudioIndex: string[] = [];
+        const transcripts: string[] = [];
+        for (const int of sorted) {
+            for (let i = 0; i < int.audioUrls.length; i++) {
+                audioUrls.push(int.audioUrls[i] ?? null);
+                if (int.audioObjectKeys[i]) audioObjectKeys.push(int.audioObjectKeys[i]);
+                interactionIdByAudioIndex.push(int.id);
+            }
+            if (int.transcript?.trim()) transcripts.push(int.transcript.trim());
+        }
+        result.push({
+            ...first,
+            id: first.id,
+            audioUrls,
+            audioObjectKeys,
+            transcript: transcripts.length ? transcripts.join("\n\n") : null,
+            interactionIdByAudioIndex,
+            allInteractionIds: sorted.map((i) => i.id),
+        });
+    }
+    result.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    return result;
+}
 
 export default function AudioReviewPage() {
     const [interactions, setInteractions] = useState<AudioInteraction[]>([]);
@@ -90,7 +139,7 @@ export default function AudioReviewPage() {
         transcript: string | null;
         summary: string | null;
     } | null>(null);
-    const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+    const [deleteTarget, setDeleteTarget] = useState<AudioInteraction | null>(null);
     const [deletingId, setDeletingId] = useState<string | null>(null);
     const [adminSavingId, setAdminSavingId] = useState<string | null>(null);
 
@@ -112,6 +161,8 @@ export default function AudioReviewPage() {
     useEffect(() => {
         fetchInteractions(currentPage, debouncedSearch);
     }, [currentPage, debouncedSearch]);
+
+    const displayInteractions = useMemo(() => mergeInteractionsByContact(interactions), [interactions]);
 
     async function fetchInteractions(page: number, search: string = "") {
         setLoading(true);
@@ -190,13 +241,17 @@ export default function AudioReviewPage() {
     }
 
     async function handleTranscribe(interaction: AudioInteraction) {
-        const urls = interaction.audioUrls;
+        const selectedIndex = selectedAudioIndices[interaction.id] ?? 0;
+        const realId = interaction.interactionIdByAudioIndex?.[selectedIndex] ?? interaction.id;
+        const realInteraction = interactions.find((i) => i.id === realId) ?? interaction;
+
+        const urls = realInteraction.audioUrls;
         if (!urls || urls.length === 0) {
             toast.error("No audio to transcribe");
             return;
         }
 
-        setTranscribingId(interaction.id);
+        setTranscribingId(realInteraction.id);
         const toastId = toast.loading(`Transcribing ${urls.length} audio file(s)...`);
 
         try {
@@ -204,7 +259,7 @@ export default function AudioReviewPage() {
             const allSegments: Array<{ text: string; start: number; end: number }> = [];
             const allHotspots: Array<{ start: number; end: number; [k: string]: unknown }> = [];
             let cumulativeOffsetSec = 0;
-            let finalSnapshotData: Record<string, unknown> = { ...(interaction.structuredSnapshot as Record<string, unknown> || {}) };
+            let finalSnapshotData: Record<string, unknown> = { ...(realInteraction.structuredSnapshot as Record<string, unknown> || {}) };
 
             for (let i = 0; i < urls.length; i++) {
                 const url = urls[i];
@@ -277,8 +332,8 @@ export default function AudioReviewPage() {
                 // If the backend detected contact info updates in this audio
                 if (data.suggested_contact_info) {
                     setSuggestedUpdate({
-                        interactionId: interaction.id,
-                        contactId: interaction.contact.id,
+                        interactionId: realInteraction.id,
+                        contactId: realInteraction.contact.id,
                         ...data.suggested_contact_info
                     });
                     setIsUpdateModalOpen(true);
@@ -291,7 +346,7 @@ export default function AudioReviewPage() {
 
             setGeneratedTranscripts((prev) => {
                 const next = new Map(prev);
-                next.set(interaction.id, fullTranscript);
+                next.set(realInteraction.id, fullTranscript);
                 return next;
             });
 
@@ -299,14 +354,14 @@ export default function AudioReviewPage() {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    interactionId: interaction.id,
+                    interactionId: realInteraction.id,
                     transcript: fullTranscript,
                     structuredSnapshot: finalSnapshotData
                 }),
             });
 
             setInteractions(prev => prev.map(item =>
-                item.id === interaction.id
+                item.id === realInteraction.id
                     ? { ...item, transcript: fullTranscript, structuredSnapshot: finalSnapshotData }
                     : item
             ));
@@ -430,19 +485,22 @@ export default function AudioReviewPage() {
         }
     }
 
-    async function handleDeleteInteraction(interactionId: string) {
-        setDeletingId(interactionId);
+    async function handleDeleteInteraction(interaction: AudioInteraction) {
+        const ids = interaction.allInteractionIds ?? [interaction.id];
+        setDeletingId(ids[0]);
         try {
-            const res = await fetch(`/api/interactions/audio?interactionId=${encodeURIComponent(interactionId)}`, { method: "DELETE" });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data?.error?.message || "Delete failed");
-            setInteractions((prev) => prev.filter((i) => i.id !== interactionId));
-            setDeleteTargetId(null);
-            if (currentTrack?.id === interactionId) {
+            for (const id of ids) {
+                const res = await fetch(`/api/interactions/audio?interactionId=${encodeURIComponent(id)}`, { method: "DELETE" });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data?.error?.message || "Delete failed");
+            }
+            setInteractions((prev) => prev.filter((i) => !ids.includes(i.id)));
+            setDeleteTarget(null);
+            if (ids.includes(currentTrack?.id ?? "")) {
                 setCurrentTrack(null);
                 setIsPlaying(false);
             }
-            toast.success("Entry deleted");
+            toast.success(ids.length > 1 ? "Entries deleted" : "Entry deleted");
         } catch (e) {
             toast.error(e instanceof Error ? e.message : "Delete failed");
         } finally {
@@ -661,7 +719,7 @@ export default function AudioReviewPage() {
                     </div>
                 ) : (
                     <div className="space-y-4">
-                        {interactions.map((interaction) => (
+                        {displayInteractions.map((interaction) => (
                             <AudioInteractionCard
                                 key={interaction.id}
                                 interaction={interaction}
@@ -673,13 +731,13 @@ export default function AudioReviewPage() {
                                     setIsTranscriptOpen(true);
                                 }}
                                 isPlaying={(id) => currentTrack?.id === id && isPlaying}
-                                isTranscribing={transcribingId === interaction.id}
+                                isTranscribing={(interaction.allInteractionIds ?? [interaction.id]).includes(transcribingId ?? "")}
                                 selectedAudioIndex={selectedAudioIndices[interaction.id] || 0}
                                 setSelectedAudioIndex={(idx) => setSelectedAudioIndices(prev => ({ ...prev, [interaction.id]: idx }))}
                                 isAdmin={isAdmin}
                                 onAdminEdit={openAdminEdit}
-                                onDelete={(i) => setDeleteTargetId(i.id)}
-                                isDeleting={deletingId === interaction.id}
+                                onDelete={(i) => setDeleteTarget(i)}
+                                isDeleting={(interaction.allInteractionIds ?? [interaction.id]).some((id) => id === deletingId)}
                             />
                         ))}
                     </div>
@@ -712,18 +770,18 @@ export default function AudioReviewPage() {
                     onToggleMute={() => setIsMuted(!isMuted)}
                     onClose={() => { setIsPlaying(false); setCurrentTrack(null); }}
                     formatTime={formatTime}
-                    interactions={interactions}
+                    interactions={displayInteractions}
                 />
             )}
 
             <TranscriptDialog
                 isOpen={isTranscriptOpen}
                 onClose={setIsTranscriptOpen}
-                interaction={interactions.find(i => i.id === activeInteractionId) || null}
+                interaction={displayInteractions.find(i => i.id === activeInteractionId) || interactions.find(i => i.id === activeInteractionId) || null}
                 generatedTranscript={activeInteractionId ? generatedTranscripts.get(activeInteractionId) : undefined}
                 onSummarize={handleSummarize}
                 onSeek={(seconds) => {
-                    const active = interactions.find(i => i.id === activeInteractionId);
+                    const active = displayInteractions.find(i => i.id === activeInteractionId) || interactions.find(i => i.id === activeInteractionId);
                     if (!active) return;
                     if (currentTrack?.id === activeInteractionId && audioRef.current) {
                         audioRef.current.currentTime = seconds;
@@ -820,19 +878,21 @@ export default function AudioReviewPage() {
                 </DialogContent>
             </Dialog>
 
-            <AlertDialog open={!!deleteTargetId} onOpenChange={(open) => { if (!open) setDeleteTargetId(null); }}>
+            <AlertDialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
                 <AlertDialogContent>
                     <AlertDialogHeader>
                         <AlertDialogTitle>Delete entry?</AlertDialogTitle>
                         <AlertDialogDescription>
-                            This will permanently delete this interaction and its audio/transcript data. This action cannot be undone.
+                            {deleteTarget?.allInteractionIds && deleteTarget.allInteractionIds.length > 1
+                                ? "This will permanently delete this contact's interactions and all audio/transcript data. This action cannot be undone."
+                                : "This will permanently delete this interaction and its audio/transcript data. This action cannot be undone."}
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                         <AlertDialogCancel>Cancel</AlertDialogCancel>
                         <AlertDialogAction
                             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                            onClick={() => deleteTargetId && handleDeleteInteraction(deleteTargetId)}
+                            onClick={() => deleteTarget && handleDeleteInteraction(deleteTarget)}
                         >
                             Delete
                         </AlertDialogAction>

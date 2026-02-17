@@ -13,6 +13,8 @@ from api.models import (
     ExtractContactResponse,
     GenerateFollowupEmailRequest,
     GenerateFollowupEmailResponse,
+    ClassifyMeetingReplyRequest,
+    ClassifyMeetingReplyResponse,
 )
 from utils.whisper_utils import whisper_model
 from utils.audio_preprocess import preprocess_audio
@@ -281,7 +283,6 @@ async def extract_contact_from_text(req: ExtractContactRequest):
         return ExtractContactResponse(success=False, data=None, error=str(e))
 
 
-@router.post("/generate-followup-email", response_model=GenerateFollowupEmailResponse)
 async def generate_followup_email(req: GenerateFollowupEmailRequest):
     """
     Generate a personalized follow-up email from FinIdeas using Gemma3 (Ollama).
@@ -295,6 +296,7 @@ async def generate_followup_email(req: GenerateFollowupEmailRequest):
             contact_company=req.contact_company,
             transcript=req.transcript,
             summary=req.summary,
+            action_items=req.action_items,
             model=req.model or "gemma3:4b",
         )
         subject = result.get("subject") or "FinIdeas – Follow-up"
@@ -314,6 +316,35 @@ async def generate_followup_email(req: GenerateFollowupEmailRequest):
             subject=None,
             body_plain=None,
             body_html=None,
+            error=str(e),
+        )
+
+
+async def classify_meeting_reply(req: ClassifyMeetingReplyRequest):
+    """
+    Classify if an email reply indicates the person wants to schedule a meeting. Used by the automatic meeting scheduler.
+    """
+    try:
+        from utils.llm_utils import classify_meeting_reply as llm_classify_meeting_reply
+        result = llm_classify_meeting_reply(
+            reply_text=req.reply_text,
+            original_subject=req.original_subject,
+            model=req.model or "gemma3:4b",
+            current_datetime=req.current_datetime,
+            free_slots=req.free_slots,
+        )
+        return ClassifyMeetingReplyResponse(
+            success=True,
+            wants_meeting=result.get("wants_meeting", False),
+            suggested_times=result.get("suggested_times"),
+            error=result.get("error"),
+        )
+    except Exception as e:
+        print(f"[ClassifyMeetingReply] Error: {str(e)}")
+        return ClassifyMeetingReplyResponse(
+            success=False,
+            wants_meeting=False,
+            suggested_times=None,
             error=str(e),
         )
 
