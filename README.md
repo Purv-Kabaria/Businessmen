@@ -1,4 +1,4 @@
-# FinBridge — Contact & Deal Management Platform
+# FinBridge - Contact & Deal Management Platform
 
 <div align="center">
 
@@ -19,7 +19,7 @@
 ## Table of Contents
 
 | # | Section |
-|---|--------|
+|---|-------- |
 | 1 | [Executive Summary](#1-executive-summary) |
 | 2 | [Technology Stack](#2-technology-stack) |
 | 3 | [Business & Product Overview](#3-business--product-overview) |
@@ -91,13 +91,13 @@
 
 ### 3.1 What FinBridge Does
 
-1. **Field capture** — Users capture leads at stalls/events (name, phone, email, interests) and optional voice notes, with or without network.
-2. **Audio storage** — Audio is uploaded to S3/MinIO and linked to interactions; multiple clips per contact are supported (array of object keys).
-3. **Deal review** — Moderators listen to audio, view transcripts, and mark deals as Profitable / Engaging / Worthy and add remarks.
-4. **Deal list & export** — Moderators view all deal reviews in a table and can export to CSV.
-5. **Admin dashboard** — Admins see site-wide analytics (users, contacts, interactions, follow-ups, deal metrics) and manage users, moderators, and contacts (CRUD).
-6. **Follow-ups** — Contacts can have follow-up tasks (due date, status); workflow supports reminders and escalation (logic can be extended via cron).
-7. **Sync** — Offline-captured contacts and interactions sync to the server when online; audio is queued and uploaded in batches.
+1. **Field capture** - Users capture leads at stalls/events (name, phone, email, interests) and optional voice notes, with or without network.
+2. **Audio storage** - Audio is uploaded to S3/MinIO and linked to interactions; multiple clips per contact are supported (array of object keys).
+3. **Deal review** - Moderators listen to audio, view transcripts, and mark deals as Profitable / Engaging / Worthy and add remarks.
+4. **Deal list & export** - Moderators view all deal reviews in a table and can export to CSV.
+5. **Admin dashboard** - Admins see site-wide analytics (users, contacts, interactions, follow-ups, deal metrics) and manage users, moderators, and contacts (CRUD).
+6. **Follow-ups** - Contacts can have follow-up tasks (due date, status); workflow supports reminders and escalation (logic can be extended via cron).
+7. **Sync** - Offline-captured contacts and interactions sync to the server when online; audio is queued and uploaded in batches.
 
 ### 3.2 Key Numbers (What the Platform Tracks)
 
@@ -131,41 +131,41 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                              CLIENT (Browser / PWA)                          │
+│                              CLIENT (Browser / PWA)                         │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐  │
-│  │   Home       │  │  Field /     │  │  Moderator   │  │  Admin           │  │
-│  │   Landing    │  │  Stall       │  │  Audio &     │  │  Dashboard &     │  │
-│  │   (Public)   │  │  Capture     │  │  Deals       │  │  CRUD            │  │
-│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘  └────────┬─────────┘  │
-│         │                 │                 │                    │            │
-│         │                 │  ┌──────────────▼──────────────┐    │            │
-│         │                 │  │  IndexedDB (Offline Store)   │    │            │
-│         │                 │  │  • draft (stall/field)       │    │            │
-│         │                 │  │  • contacts (local + sync)   │    │            │
-│         │                 │  │  • audio_transcript_queue   │    │            │
-│         │                 │  └──────────────┬──────────────┘    │            │
-│         │                 │                 │                    │            │
-│         └─────────────────┴─────────────────┴────────────────────┘            │
-│                                    │                                          │
-│                          HTTPS (when online)                                  │
-└────────────────────────────────────┼──────────────────────────────────────────┘
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐ │
+│  │   Home       │  │  Field /     │  │  Moderator   │  │  Admin           │ │
+│  │   Landing    │  │  Stall       │  │  Audio &     │  │  Dashboard &     │ │
+│  │   (Public)   │  │  Capture     │  │  Deals       │  │  CRUD            │ │
+│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘  └────────┬─────────┘ │
+│         │                 │                 │                   │           │
+│         │                 │  ┌──────────────▼──────────────┐    │           │
+│         │                 │  │  IndexedDB (Offline Store)  │    │           │
+│         │                 │  │  • draft (stall/field)      │    │           │
+│         │                 │  │  • contacts (local + sync)  │    │           │
+│         │                 │  │  • audio_transcript_queue   │    │           │
+│         │                 │  └──────────────┬──────────────┘    │           │
+│         │                 │                 │                   │           │
+│         └─────────────────┴─────────────────┴───────────────────┘           │
+│                                    │                                        │
+│                          HTTPS (when online)                                │
+└────────────────────────────────────┼────────────────────────────────────────┘
                                      │
-┌────────────────────────────────────▼──────────────────────────────────────────┐
-│                         NEXT.JS APP (API Routes + SSR)                        │
+┌────────────────────────────────────▼─────────────────────────────────────────┐
+│                         NEXT.JS APP (API Routes + SSR)                       │
 ├──────────────────────────────────────────────────────────────────────────────┤
-│  Auth (JWT)  │  /api/contacts  │  /api/interactions  │  /api/sync/*         │
-│  /api/auth/* │  /api/sync/     │  /api/interactions/ │  /api/moderator/*   │
-│              │  contacts       │  audio              │  /api/admin/*        │
+│  Auth (JWT)  │  /api/contacts  │  /api/interactions  │  /api/sync/*          │
+│  /api/auth/* │  /api/sync/     │  /api/interactions/ │  /api/moderator/*     │
+│              │  contacts       │  audio              │  /api/admin/*         │
 └────────────────────────────────────┬─────────────────────────────────────────┘
                                      │
          ┌───────────────────────────┼───────────────────────────┐
          │                           │                           │
          ▼                           ▼                           ▼
 ┌─────────────────┐       ┌──────────────────┐       ┌─────────────────────┐
-│   PostgreSQL    │       │  MinIO / S3       │       │  Redis + BullMQ      │
-│   (Prisma)      │       │  (Audio blobs)    │       │  (Transcribe, sync    │
-│                 │       │                   │       │   workers)           │
+│   PostgreSQL    │       │  MinIO / S3      │       │  Redis + BullMQ     │
+│   (Prisma)      │       │  (Audio blobs)   │       │  (Transcribe, sync  │
+│                 │       │                  │       │   workers)          │
 └─────────────────┘       └──────────────────┘       └─────────────────────┘
 ```
 
@@ -303,30 +303,30 @@ The capture module uses a single IndexedDB database: **`finbridge-capture`** (ve
      │
      ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│  1. User fills form (name, phone, email, interests)               │
-│     → Draft saved to IndexedDB (debounced)                        │
+│  1. User fills form (name, phone, email, interests)             │
+│     → Draft saved to IndexedDB (debounced)                      │
 └─────────────────────────────────────────────────────────────────┘
      │
      ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│  2. User optionally records voice note                            │
-│     → Blob stored in audio_transcript_queue (pending)             │
-│     → draft.draft_audio_queue_id linked to queue item             │
+│  2. User optionally records voice note                          │
+│     → Blob stored in audio_transcript_queue (pending)           │
+│     → draft.draft_audio_queue_id linked to queue item           │
 └─────────────────────────────────────────────────────────────────┘
      │
      ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│  3. User clicks Save                                              │
-│     → Duplicate check: by phone in IndexedDB (local)             │
-│     → If new: contact record created (local_id, pending_sync)     │
-│     → If duplicate: "Add anyway" can create or append              │
-│     → Audio queue item(s) linked to contact_local_id              │
+│  3. User clicks Save                                            │
+│     → Duplicate check: by phone in IndexedDB (local)            │
+│     → If new: contact record created (local_id, pending_sync)   │
+│     → If duplicate: "Add anyway" can create or append           │
+│     → Audio queue item(s) linked to contact_local_id            │
 └─────────────────────────────────────────────────────────────────┘
      │
      ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│  4. No HTTP call is made; all data is in IndexedDB                │
-│     → User can continue capturing; queue grows                    │
+│  4. No HTTP call is made; all data is in IndexedDB              │
+│     → User can continue capturing; queue grows                  │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
