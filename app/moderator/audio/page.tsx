@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import { Loader2, Play, Pause, Phone, Mail, Building2, Tag, User, Calendar, FileAudio, Wand2, Volume2, VolumeX, SkipBack, SkipForward, X, Sparkles, FileText, Clock, Search, ChevronLeft, ChevronRight, Download, Check } from "lucide-react";
+import Link from "next/link";
+import { Loader2, Play, Pause, Phone, Mail, Building2, Tag, User, Calendar, FileAudio, Wand2, Volume2, VolumeX, SkipBack, SkipForward, X, Sparkles, FileText, Clock, Search, ChevronLeft, ChevronRight, Download, Check, LayoutDashboard } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
@@ -511,6 +512,16 @@ export default function AudioReviewPage() {
                 </div>
 
                 <div className="flex flex-col sm:flex-row xl:items-center gap-3 sm:gap-4">
+                    <Link href="/admin/dashboard">
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-11 shrink-0 text-[10px] font-bold uppercase tracking-wider rounded-xl border-primary/20 hover:bg-primary/5 transition-all shadow-sm gap-1.5 px-4"
+                        >
+                            <LayoutDashboard className="h-3.5 w-3.5 text-primary" />
+                            Admin Dashboard
+                        </Button>
+                    </Link>
                     <div className="relative w-full sm:w-72 lg:w-80">
                         <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                         <Input

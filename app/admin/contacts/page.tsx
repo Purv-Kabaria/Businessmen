@@ -107,7 +107,7 @@ export default function AdminContactsPage() {
                         <BreadcrumbSeparator />
                         <BreadcrumbItem>
                             <BreadcrumbLink asChild>
-                                <Link href="/admin">Admin Dashboard</Link>
+                                <Link href="/admin/dashboard">Admin Dashboard</Link>
                             </BreadcrumbLink>
                         </BreadcrumbItem>
                         <BreadcrumbSeparator />
@@ -119,7 +119,7 @@ export default function AdminContactsPage() {
 
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex items-center gap-3">
-                        <Link href="/admin">
+                        <Link href="/admin/dashboard">
                             <Button variant="outline" size="icon" className="shrink-0">
                                 <ArrowLeft className="h-4 w-4" />
                             </Button>

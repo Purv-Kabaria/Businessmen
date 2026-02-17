@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
-import { Loader2, ArrowLeft, TrendingUp, Heart, Award, FileText, ChevronLeft, ChevronRight, Pencil, Check, X, Download } from "lucide-react";
+import { Loader2, ArrowLeft, TrendingUp, Heart, Award, FileText, ChevronLeft, ChevronRight, Pencil, Check, X, Download, LayoutDashboard } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
@@ -269,6 +269,12 @@ export default function ModeratorDealsPage() {
                         </div>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
+                    <Link href="/admin/dashboard">
+                        <Button variant="outline" size="sm" className="gap-1.5">
+                            <LayoutDashboard className="h-4 w-4" />
+                            Admin Dashboard
+                        </Button>
+                    </Link>
                     <Button
                         variant="outline"
                         size="sm"
