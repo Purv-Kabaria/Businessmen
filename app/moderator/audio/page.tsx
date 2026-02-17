@@ -165,6 +165,9 @@ export default function AudioReviewPage() {
 
         try {
             const transcriptParts: string[] = [];
+            const allSegments: Array<{ text: string; start: number; end: number }> = [];
+            const allHotspots: Array<{ start: number; end: number; [k: string]: unknown }> = [];
+            let cumulativeOffsetSec = 0;
             let finalSnapshotData: any = { ...(interaction.structuredSnapshot || {}) };
 
             for (let i = 0; i < urls.length; i++) {
@@ -202,7 +205,38 @@ export default function AudioReviewPage() {
                 if (data.emotions) finalSnapshotData.emotions = data.emotions;
                 if (data.sentimentFlow) finalSnapshotData.sentimentFlow = data.sentimentFlow;
                 if (data.voiceEmotion) finalSnapshotData.voiceEmotion = data.voiceEmotion;
-                if (data.hotspots) finalSnapshotData.hotspots = data.hotspots;
+
+                // Timestamp-based segments for sentence-level highlighting and seek
+                const partSegments = Array.isArray(data.segments) ? data.segments : [];
+                let partEndSec = cumulativeOffsetSec;
+                for (const seg of partSegments) {
+                    const start = typeof seg.start === "number" ? seg.start : 0;
+                    const end = typeof seg.end === "number" ? seg.end : start;
+                    const segText = typeof seg.text === "string" ? seg.text : String(seg?.text ?? "").trim();
+                    if (segText) {
+                        allSegments.push({
+                            text: segText,
+                            start: Math.round((cumulativeOffsetSec + start) * 100) / 100,
+                            end: Math.round((cumulativeOffsetSec + end) * 100) / 100,
+                        });
+                        partEndSec = Math.max(partEndSec, cumulativeOffsetSec + end);
+                    }
+                }
+                if (partSegments.length > 0) {
+                    const last = partSegments[partSegments.length - 1];
+                    partEndSec = cumulativeOffsetSec + (typeof last?.end === "number" ? last.end : 0);
+                }
+                const partHotspots = Array.isArray(data.hotspots) ? data.hotspots : [];
+                for (const h of partHotspots) {
+                    const start = typeof h.start === "number" ? h.start : 0;
+                    const end = typeof h.end === "number" ? h.end : start;
+                    allHotspots.push({
+                        ...h,
+                        start: Math.round((cumulativeOffsetSec + start) * 100) / 100,
+                        end: Math.round((cumulativeOffsetSec + end) * 100) / 100,
+                    });
+                }
+                cumulativeOffsetSec = partEndSec;
 
                 // If the backend detected contact info updates in this audio
                 if (data.suggested_contact_info) {
@@ -215,6 +249,8 @@ export default function AudioReviewPage() {
                 }
             }
 
+            if (allSegments.length > 0) finalSnapshotData.segments = allSegments;
+            if (allHotspots.length > 0) finalSnapshotData.hotspots = allHotspots;
             const fullTranscript = transcriptParts.join("\n\n");
 
             setGeneratedTranscripts((prev) => {

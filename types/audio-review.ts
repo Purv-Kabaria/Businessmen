@@ -20,6 +20,8 @@ export interface AudioInteraction {
     audioObjectKeys: string[];
     transcript: string | null;
     structuredSnapshot: {
+        /** Timestamp-based segments for sentence-level seek and highlighting. */
+        segments?: Array<{ text: string; start: number; end: number }>;
         summary?: string;
         hotspots?: any[];
         sentiment?: {
