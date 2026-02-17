@@ -38,20 +38,40 @@ export async function GET(req: NextRequest) {
             );
         }
 
-        // 2. Get pagination parameters
+        // 2. Get pagination and search parameters
         const { searchParams } = new URL(req.url);
         const page = parseInt(searchParams.get("page") || "1");
         const limit = parseInt(searchParams.get("limit") || "20");
+        const search = searchParams.get("search") || "";
         const skip = (page - 1) * limit;
 
-        // 3. Fetch interactions with audio and related contact
+        // 3. Build search filter
+        const where: any = {
+            audioObjectKey: {
+                not: null,
+            },
+        };
+
+        if (search) {
+            where.OR = [
+                { transcript: { contains: search, mode: "insensitive" } },
+                {
+                    contact: {
+                        OR: [
+                            { name: { contains: search, mode: "insensitive" } },
+                            { email: { contains: search, mode: "insensitive" } },
+                            { company: { contains: search, mode: "insensitive" } },
+                            { phone: { contains: search, mode: "insensitive" } },
+                        ]
+                    }
+                }
+            ];
+        }
+
+        // 4. Fetch interactions with audio and related contact
         const [interactions, total] = await Promise.all([
             prisma.interaction.findMany({
-                where: {
-                    audioObjectKey: {
-                        not: null,
-                    },
-                },
+                where,
                 include: {
                     contact: {
                         select: {
@@ -78,13 +98,7 @@ export async function GET(req: NextRequest) {
                 skip,
                 take: limit,
             }),
-            prisma.interaction.count({
-                where: {
-                    audioObjectKey: {
-                        not: null,
-                    },
-                },
-            }),
+            prisma.interaction.count({ where }),
         ]);
 
         // 4. Generate signed URLs for audio files

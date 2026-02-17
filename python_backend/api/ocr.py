@@ -39,7 +39,7 @@ async def process_ocr(image: UploadFile = File(...)):
         print(f"[OCR] Image size: {pil_image.width}x{pil_image.height}")
         
         # Try Ollama vision model first
-        raw_text, ollama_success = extract_text_with_ollama(pil_image)
+        raw_text, ollama_data, ollama_success = extract_text_with_ollama(pil_image)
         ocr_engine = "gemma3-vision"
         
         # Fall back to Tesseract if Ollama failed
@@ -52,6 +52,11 @@ async def process_ocr(image: UploadFile = File(...)):
             print("[OCR] Running multi-config Tesseract OCR...")
             raw_text = extract_text_multi_config(pil_image)
             ocr_engine = "tesseract-multi-config"
+            
+            # Use smart extraction on Tesseract text
+            print("[OCR] Using smart field extraction on Tesseract output...")
+            from utils.ocr_utils import smart_extract_fields
+            ollama_data = smart_extract_fields(raw_text)
         
         if not raw_text or len(raw_text.strip()) < 5:
             raise HTTPException(
@@ -60,9 +65,8 @@ async def process_ocr(image: UploadFile = File(...)):
             )
         
         print(f"[OCR] Extracted text ({len(raw_text)} chars)")
-        print(f"[OCR] Text preview: {raw_text[:200]}")
         
-        # Process extracted text
+        # Process extracted text with legacy logic as backup/validation
         lines = [line.strip() for line in raw_text.split('\n') if line.strip()]
         
         phones = extract_phone_numbers(raw_text)
@@ -70,19 +74,28 @@ async def process_ocr(image: UploadFile = File(...)):
         name = extract_name(raw_text, lines)
         company = extract_company(raw_text, lines)
         
+        # Merge Ollama structured data with extracted data
+        # Ollama usually has much better context for fields
+        if ollama_data:
+            if ollama_data.get('email') and ollama_data['email'] not in emails:
+                emails.insert(0, ollama_data['email'])
+            if ollama_data.get('phone') and ollama_data['phone'] not in phones:
+                phones.insert(0, ollama_data['phone'])
+            if ollama_data.get('name') and not name:
+                name = ollama_data['name']
+            if ollama_data.get('company') and not company:
+                company = ollama_data['company']
+
         print(f"[OCR] Found: {len(phones)} phones, {len(emails)} emails")
-        print(f"[OCR] Phones: {phones}")
-        print(f"[OCR] Emails: {emails}")
-        print(f"[OCR] Name: {name}")
-        print(f"[OCR] Company: {company}")
         
         # Select best email
         best_email = ''
         if emails:
+            # If we had structured data, prefer it if it's in our extracted list or unique
             scored_emails = [(email, score_email(email)) for email in emails]
             scored_emails.sort(key=lambda x: x[1], reverse=True)
             best_email = scored_emails[0][0]
-            print(f"[OCR] Best email: {best_email} (score: {scored_emails[0][1]})")
+            print(f"[OCR] Best email selected: {best_email}")
         
         # Select best phone
         best_phone = ''
@@ -97,7 +110,8 @@ async def process_ocr(image: UploadFile = File(...)):
             'name': name,
             'phone': best_phone,
             'email': best_email,
-            'company': company
+            'company': company,
+            'title': ollama_data.get('title', '') if ollama_data else ''
         }
         
         validation = validate_data(contact_data)

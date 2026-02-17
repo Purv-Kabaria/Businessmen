@@ -5,12 +5,13 @@ import base64
 from io import BytesIO
 from typing import List, Tuple
 import re
+import json
 
 
-def extract_text_with_ollama(image: Image.Image) -> Tuple[str, bool]:
+def extract_text_with_ollama(image: Image.Image) -> Tuple[str, dict, bool]:
     """
-    Try to extract text using Ollama vision model (gemma3)
-    Returns (text, success)
+    Try to extract text and structured data using Ollama vision model (gemma3)
+    Returns (raw_text, structured_data, success)
     """
     try:
         # Convert image to base64
@@ -22,18 +23,20 @@ def extract_text_with_ollama(image: Image.Image) -> Tuple[str, bool]:
         OLLAMA_MODEL = "gemma3:4b"
         OLLAMA_HOST = "http://127.0.0.1:11434"
         
-        prompt = """Extract ALL text from this business card image.
-Include:
-- Person's name
-- Phone number(s)
-- Email address(es)
-- Company name
-- Job title
-- Any other visible text
+        prompt = """You are a specialized OCR assistant. Extract ALL contact information from this business card image with 100% accuracy.
 
-Return ONLY the extracted text without any formatting or interpretation."""
+Return a JSON object with strictly these fields:
+- name: Full name (Properly capitalized)
+- phone: Primary mobile number (Include country code if present)
+- email: Primary email address (PAY EXTREME ATTENTION TO THIS. Correct any obvious OCR errors like 'at' instead of '@', or dots read as commas)
+- company: Full company name
+- title: Job title or designation
+- raw_text: Every single character or word found on the card transcribed literally
+
+If any field is missing, use an empty string.
+JSON ONLY. No other text."""
         
-        print(f"[OCR] Trying Ollama vision model ({OLLAMA_MODEL})...")
+        print(f"[OCR] Trying Ollama vision model ({OLLAMA_MODEL}) for structured extraction...")
         
         response = requests.post(
             f"{OLLAMA_HOST}/api/generate",
@@ -42,6 +45,7 @@ Return ONLY the extracted text without any formatting or interpretation."""
                 "prompt": prompt,
                 "images": [img_base64],
                 "stream": False,
+                "format": "json",
                 "options": {
                     "temperature": 0.1
                 }
@@ -51,26 +55,65 @@ Return ONLY the extracted text without any formatting or interpretation."""
         
         if response.status_code == 200:
             data = response.json()
-            text = data.get('response', '').strip()
-            if text and len(text) > 5:
-                print(f"[OCR] Ollama extraction successful ({len(text)} chars)")
-                return text, True
-            else:
-                print("[OCR] Ollama returned empty/short text")
-                return "", False
+            raw_response = data.get('response', '').strip()
+            try:
+                structured = json.loads(raw_response)
+                # Ensure all fields exist
+                for field in ['name', 'phone', 'email', 'company', 'title', 'raw_text']:
+                    if field not in structured:
+                        structured[field] = ""
+                
+                print(f"[OCR] Ollama structured extraction successful")
+                return structured.get('raw_text', ''), structured, True
+            except Exception as e:
+                print(f"[OCR] Ollama JSON parse error: {e}")
+                return raw_response, {}, True
         else:
             print(f"[OCR] Ollama request failed: {response.status_code}")
-            return "", False
+            return "", {}, False
             
     except requests.exceptions.ConnectionError:
         print("[OCR] Ollama not available (connection refused)")
-        return "", False
+        return "", {}, False
     except requests.exceptions.Timeout:
         print("[OCR] Ollama request timed out")
-        return "", False
+        return "", {}, False
     except Exception as e:
         print(f"[OCR] Ollama error: {str(e)}")
-        return "", False
+        return "", {}, False
+
+
+def smart_extract_fields(text: str) -> dict:
+    """
+    Fallback: Uses LLM to extract structured fields from raw Tesseract text
+    """
+    try:
+        OLLAMA_MODEL = "gemma3:4b"
+        OLLAMA_HOST = "http://127.0.0.1:11434"
+        
+        prompt = f"""Extract contact information from this OCR text:
+{text}
+
+Return a JSON object with: name, phone, email, company, title.
+Return ONLY JSON."""
+
+        response = requests.post(
+            f"{OLLAMA_HOST}/api/generate",
+            json={
+                "model": OLLAMA_MODEL,
+                "prompt": prompt,
+                "stream": False,
+                "format": "json",
+                "options": {"temperature": 0.1}
+            },
+            timeout=10
+        )
+        
+        if response.status_code == 200:
+            return json.loads(response.json().get('response', '{}'))
+    except:
+        pass
+    return {}
 
 
 def preprocess_image(image: Image.Image) -> List[Image.Image]:
@@ -178,24 +221,73 @@ def extract_phone_numbers(text: str) -> List[str]:
 
 
 def extract_emails(text: str) -> List[str]:
-    """Extract all possible email addresses"""
+    """Extract all possible email addresses with extensive support for OCR errors"""
+    # Patterns to catch emails with potential OCR noise (spaces) and common misreadings
     patterns = [
-        r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}',
-        r'[a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z]{2,}',
+        # Standard pattern with optional spaces around separators
+        r'[a-zA-Z0-9\._%+-]+\s*[@©®\(\)at]+\s*[a-zA-Z0-9\.-]+\s*[\.\,_]\s*[a-zA-Z]{2,}',
+        # Common Tesseract error: @ misread as 8 or 0 or O in some contexts
+        r'[a-zA-Z0-9\._%+-]+\s*[80O]\s*[a-zA-Z0-9\.-]+\s*[\.\,_]\s*[a-zA-Z]{2,}',
+        # Catch emails where @ might be missing but the structure is there
+        r'[a-zA-Z0-9\._%+-]+at[a-zA-Z0-9\.-]+[\.\,_][a-zA-Z]{2,}',
+        # Fuzzy match for things like "name at domain dot com"
+        r'[a-zA-Z0-9\._%+-]+\s+at\s+[a-zA-Z0-9\.-]+\s+dot\s+[a-zA-Z]{2,}'
     ]
     
-    emails = []
+    extracted = []
+    # Search in both multiline and single line modes
     for pattern in patterns:
-        matches = re.findall(pattern, text, re.IGNORECASE)
-        emails.extend(matches)
+        matches = re.findall(pattern, text, re.IGNORECASE | re.MULTILINE)
+        extracted.extend(matches)
     
     # Deduplicate and validate
     valid_emails = []
-    for email in emails:
-        email = email.lower().strip()
-        if email not in valid_emails and '@' in email and '.' in email:
-            if not any(bad in email for bad in ['.jpg', '.png', '.pdf', '..', '@@']):
-                valid_emails.append(email)
+    for email in extracted:
+        # Clean up OCR noise
+        # 1. Remove all whitespace
+        email = "".join(email.split())
+        
+        # 2. Convert common misreadings of separators
+        email = email.lower()
+        email = email.replace('©', '@').replace('®', '@').replace('(at)', '@').replace('(a)', '@').replace('dot', '.')
+        
+        # Handle common .com misreadings
+        email = email.replace(',com', '.com').replace('_com', '.com').replace('.com.', '.com')
+        email = email.replace(',in', '.in').replace('_in', '.in')
+        email = email.replace(',net', '.net').replace('_net', '.net')
+        email = email.replace(',org', '.org').replace('_org', '.org')
+        
+        # Handle cases where @ was read as O, 0, 8 (risky, so only do if structure is strong)
+        if '@' not in email:
+            if any(ext in email for ext in ['.com', '.in', '.org', '.net', '.co.']):
+                # Find a plausible @ position
+                # If there's an 'at' in the middle
+                if 'at' in email and not email.startswith('at'):
+                    email = email.replace('at', '@', 1)
+                # If there's a 0, 8 or O in a suspicious place (between local and domain)
+                elif re.search(r'[a-z0-9][08o][a-z0-9]', email):
+                    # Only do this if we are desperate
+                    pass
+
+        # Final validation and cleanup
+        if '@' in email and '.' in email:
+            parts = email.split('@')
+            if len(parts) >= 2:
+                # Take first local part and last domain part in case of multiple @
+                local = parts[0]
+                domain = parts[-1] 
+                
+                # Sanitize components
+                local = re.sub(r'[^a-z0-9\._%+-]', '', local)
+                domain = re.sub(r'[^a-z0-9\.-]', '', domain)
+                
+                # Reconstruct
+                clean_email = f"{local}@{domain}"
+                
+                if clean_email not in valid_emails:
+                    if not any(bad in clean_email for bad in ['.jpg', '.png', '.pdf', '..', '@@', 'www.']):
+                        if len(local) > 1 and len(domain) > 3:
+                            valid_emails.append(clean_email)
     
     return valid_emails
 
@@ -307,19 +399,35 @@ def normalize_phone(phone: str) -> str:
 
 
 def score_email(email: str) -> int:
-    """Score email quality - prefer professional over personal"""
+    """Score email quality - prefer professional over personal, and handle OCR artifacts"""
     score = 100
     email_lower = email.lower()
     
-    personal_domains = ['gmail', 'yahoo', 'hotmail', 'outlook', 'rediff', 'proton']
+    # Penalty for common personal/junk domains
+    personal_domains = ['gmail', 'yahoo', 'hotmail', 'outlook', 'rediff', 'proton', 'icloud']
     if any(domain in email_lower for domain in personal_domains):
-        score -= 30
+        score -= 20
+        
+    # Penalty for very short or very long local parts
+    parts = email_lower.split('@')
+    if len(parts) == 2:
+        local, domain = parts
+        if len(local) < 3: score -= 30
+        if len(domain) < 4: score -= 30
+        
+        # Heavy penalty for suspicious characters in domain
+        if any(c in domain for c in ['_', '(', ')', '{', '}', '[', ']']):
+            score -= 50
     
-    score -= len(email) // 5
+    # Length based penalty (too long usually means OCR joined multiple lines)
+    if len(email) > 40:
+        score -= 15
     
+    # Preference for dot-separated names (common in business)
     if re.match(r'^[a-z]+\.[a-z]+@', email_lower):
-        score += 20
+        score += 25
     
+    # Penalty for digits in local part (often noise or personal)
     if re.search(r'\d', email.split('@')[0]):
         score -= 10
     
