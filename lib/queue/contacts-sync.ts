@@ -21,8 +21,8 @@ let contactsSyncQueue: Queue<ContactSyncJobPayload> | null = null;
 function getQueue(): Queue<ContactSyncJobPayload> {
   if (!contactsSyncQueue) {
     contactsSyncQueue = new Queue<ContactSyncJobPayload>(QUEUE_NAME, {
-      connection: getBullMQConnection(),
-    });
+      connection: getBullMQConnection() as never,
+    }) as Queue<ContactSyncJobPayload>;
   }
   return contactsSyncQueue;
 }

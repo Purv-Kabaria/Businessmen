@@ -16,8 +16,8 @@ let audioTranscriptQueue: Queue<AudioTranscriptJobPayload> | null = null;
 function getQueue(): Queue<AudioTranscriptJobPayload> {
   if (!audioTranscriptQueue) {
     audioTranscriptQueue = new Queue<AudioTranscriptJobPayload>(QUEUE_NAME, {
-      connection: getBullMQConnection(),
-    });
+      connection: getBullMQConnection() as never,
+    }) as Queue<AudioTranscriptJobPayload>;
   }
   return audioTranscriptQueue;
 }

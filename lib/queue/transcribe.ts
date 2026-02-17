@@ -12,10 +12,10 @@ let transcribeQueue: Queue<TranscribeJobPayload> | null = null;
 function getQueue(): Queue<TranscribeJobPayload> {
   if (!transcribeQueue) {
     transcribeQueue = new Queue<TranscribeJobPayload>(QUEUE_NAME, {
-      connection: getBullMQConnection() as import("bullmq").ConnectionOptions,
-    });
+      connection: getBullMQConnection() as never,
+    }) as Queue<TranscribeJobPayload>;
   }
-  return transcribeQueue as Queue<TranscribeJobPayload>;
+  return transcribeQueue;
 }
 
 export function getTranscribeQueue(): Queue<TranscribeJobPayload> {
