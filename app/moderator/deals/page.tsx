@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
-import { Loader2, ChevronLeft, ChevronRight, Pencil, Check, X, Download } from "lucide-react";
+import { Loader2, ChevronLeft, ChevronRight, Pencil, Check, X, Download, LayoutDashboard } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
@@ -275,38 +275,44 @@ export default function ModeratorDealsPage() {
                         </div>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        className="gap-1.5 text-xs"
-                        onClick={handleExportCSV}
-                        disabled={isExporting}
-                    >
-                        {isExporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
-                        Export CSV
-                    </Button>
-                    {pagination && (
-                        <>
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                disabled={page <= 1 || loading}
-                                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                            >
-                                <ChevronLeft className="h-4 w-4" />
+                        <Link href="/admin/dashboard">
+                            <Button variant="outline" size="sm" className="gap-1.5">
+                                <LayoutDashboard className="h-4 w-4" />
+                                Admin Dashboard
                             </Button>
-                            <span className="text-sm tabular-nums">
-                                Page {pagination.page} of {pagination.totalPages}
-                            </span>
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                disabled={page >= pagination.totalPages || loading}
-                                onClick={() => setPage((p) => p + 1)}
-                            >
-                                <ChevronRight className="h-4 w-4" />
-                            </Button>
-                        </>
+                        </Link>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            className="gap-1.5 text-xs"
+                            onClick={handleExportCSV}
+                            disabled={isExporting}
+                        >
+                            {isExporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+                            Export CSV
+                        </Button>
+                        {pagination && (
+                            <>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={page <= 1 || loading}
+                                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                                >
+                                    <ChevronLeft className="h-4 w-4" />
+                                </Button>
+                                <span className="text-sm tabular-nums">
+                                    Page {pagination.page} of {pagination.totalPages}
+                                </span>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={page >= pagination.totalPages || loading}
+                                    onClick={() => setPage((p) => p + 1)}
+                                >
+                                    <ChevronRight className="h-4 w-4" />
+                                </Button>
+                            </>
                         )}
                     </div>
                 </div>

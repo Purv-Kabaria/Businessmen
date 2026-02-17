@@ -32,29 +32,40 @@ export default function ModeratorPage() {
   const router = useRouter();
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
-    const fetchAnalytics = async () => {
+    const fetchData = async () => {
       try {
-        const response = await fetch("/api/analytics/users");
-        if (response.ok) {
-          const result = await response.json();
-          if (result.success && result.data) {
-            setAnalytics(result.data);
-          } else {
-            router.push("/login");
-          }
+        const [analyticsRes, userRes] = await Promise.all([
+          fetch("/api/analytics/users"),
+          fetch("/api/user/read", { credentials: "include" }),
+        ]);
+        if (!analyticsRes.ok) {
+          router.push("/login");
+          return;
+        }
+        const result = await analyticsRes.json();
+        if (result.success && result.data) {
+          setAnalytics(result.data);
         } else {
           router.push("/login");
+          return;
+        }
+        if (userRes.ok) {
+          const userData = await userRes.json();
+          if (userData?.success && userData?.data?.role === "ADMIN") {
+            setIsAdmin(true);
+          }
         }
       } catch (error) {
-        console.error("Failed to fetch analytics", error);
+        console.error("Failed to fetch", error);
         router.push("/login");
       } finally {
         setIsLoading(false);
       }
     };
-    fetchAnalytics();
+    fetchData();
   }, [router]);
 
   if (isLoading) {
@@ -99,57 +110,59 @@ export default function ModeratorPage() {
           </div>
         </div>
 
-        {analytics && (
-          <section className="mb-8">
-            <h2 className="text-sm font-medium text-muted-foreground mb-3">Overview</h2>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
-              <Card className="border">
-                <CardHeader className="pb-1 pt-4 px-4">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">Total users</CardTitle>
-                </CardHeader>
-                <CardContent className="pt-0 pb-4 px-4">
-                  <p className="text-2xl font-semibold">{analytics.totalUsers}</p>
-                </CardContent>
-              </Card>
-              <Card className="border">
-                <CardHeader className="pb-1 pt-4 px-4">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">Moderators</CardTitle>
-                </CardHeader>
-                <CardContent className="pt-0 pb-4 px-4">
-                  <p className="text-2xl font-semibold">{analytics.totalModerators}</p>
-                </CardContent>
-              </Card>
-              <Card className="border">
-                <CardHeader className="pb-1 pt-4 px-4">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">Admins</CardTitle>
-                </CardHeader>
-                <CardContent className="pt-0 pb-4 px-4">
-                  <p className="text-2xl font-semibold">{analytics.totalAdmins}</p>
-                </CardContent>
-              </Card>
-              {typeof analytics.totalContacts === "number" && (
+        {
+          analytics && (
+            <section className="mb-8">
+              <h2 className="text-sm font-medium text-muted-foreground mb-3">Overview</h2>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
                 <Card className="border">
                   <CardHeader className="pb-1 pt-4 px-4">
-                    <CardTitle className="text-sm font-medium text-muted-foreground">Contacts</CardTitle>
+                    <CardTitle className="text-sm font-medium text-muted-foreground">Total users</CardTitle>
                   </CardHeader>
                   <CardContent className="pt-0 pb-4 px-4">
-                    <p className="text-2xl font-semibold">{analytics.totalContacts}</p>
+                    <p className="text-2xl font-semibold">{analytics.totalUsers}</p>
                   </CardContent>
                 </Card>
-              )}
-              {typeof analytics.totalInteractions === "number" && (
                 <Card className="border">
                   <CardHeader className="pb-1 pt-4 px-4">
-                    <CardTitle className="text-sm font-medium text-muted-foreground">Interactions</CardTitle>
+                    <CardTitle className="text-sm font-medium text-muted-foreground">Moderators</CardTitle>
                   </CardHeader>
                   <CardContent className="pt-0 pb-4 px-4">
-                    <p className="text-2xl font-semibold">{analytics.totalInteractions}</p>
+                    <p className="text-2xl font-semibold">{analytics.totalModerators}</p>
                   </CardContent>
                 </Card>
-              )}
-            </div>
-          </section>
-        )}
+                <Card className="border">
+                  <CardHeader className="pb-1 pt-4 px-4">
+                    <CardTitle className="text-sm font-medium text-muted-foreground">Admins</CardTitle>
+                  </CardHeader>
+                  <CardContent className="pt-0 pb-4 px-4">
+                    <p className="text-2xl font-semibold">{analytics.totalAdmins}</p>
+                  </CardContent>
+                </Card>
+                {typeof analytics.totalContacts === "number" && (
+                  <Card className="border">
+                    <CardHeader className="pb-1 pt-4 px-4">
+                      <CardTitle className="text-sm font-medium text-muted-foreground">Contacts</CardTitle>
+                    </CardHeader>
+                    <CardContent className="pt-0 pb-4 px-4">
+                      <p className="text-2xl font-semibold">{analytics.totalContacts}</p>
+                    </CardContent>
+                  </Card>
+                )}
+                {typeof analytics.totalInteractions === "number" && (
+                  <Card className="border">
+                    <CardHeader className="pb-1 pt-4 px-4">
+                      <CardTitle className="text-sm font-medium text-muted-foreground">Interactions</CardTitle>
+                    </CardHeader>
+                    <CardContent className="pt-0 pb-4 px-4">
+                      <p className="text-2xl font-semibold">{analytics.totalInteractions}</p>
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+            </section>
+          )
+        }
 
         <section>
           <h2 className="text-sm font-medium text-muted-foreground mb-3">Actions</h2>
@@ -201,8 +214,8 @@ export default function ModeratorPage() {
             </Link>
           </div>
         </section>
-      </div>
-    </main>
+      </div >
+    </main >
   );
 }
 
