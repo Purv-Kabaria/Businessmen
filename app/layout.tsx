@@ -8,7 +8,7 @@ export const metadata: Metadata = {
   title: "FinBridge",
   description: "FinBridge",
   icons: {
-    icon: "/images/logo.svg",
+    icon: "/images/logo-white.svg",
   },
 };
 

@@ -15,8 +15,8 @@ export type NavLink = {
 
 export const NAVBAR = {
   logo: {
-    light: "/images/logo.svg",
-    dark: "/images/logo.svg",
+    light: "/images/logo-white.svg",
+    dark: "/images/logo-white.svg",
     alt: "FinBridge Logo",
     width: 32,
     height: 32,

@@ -93,8 +93,7 @@ export function Navbar() {
               alt={NAVBAR.logo.alt}
               width={NAVBAR.logo.width}
               height={NAVBAR.logo.height}
-              className="relative"
-              style={{ width: "auto", height: "auto" }}
+              className="relative h-8 w-auto object-contain"
             />
 
             <div className="font-bold text-xl font-serif">
