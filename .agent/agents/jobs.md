@@ -1,362 +1,398 @@
-# AI Interaction Ingestion & Job Scheduling – System Design Document
+# OCR Business Card Scanning Feature – System Design & Implementation Guide
 
 ---
 
 # 🎯 Objective
 
-Build the complete Interaction → Audio Upload → AI Job Scheduling pipeline.
+Build an offline-first Business Card OCR scanning system for Stall + Field Mode that:
 
-This layer must:
+- Works without internet
+- Extracts structured contact information
+- Uses phone number as deterministic identity key
+- Pre-fills contact form automatically
+- Integrates cleanly with existing Interaction API
+- Is fast (≤ 3–5 seconds processing target)
+- Never blocks UI
 
-- Work independently of frontend completion.
-- Automatically create AI jobs.
-- Store audio safely.
-- Prepare system for GPU worker.
-- Never block CRM usage.
-- Be production-safe and scalable.
-
-This document defines the **exact architecture, flow, and implementation steps**.
+This document defines the **exact architecture, flow, implementation steps, and constraints**.
 
 ---
 
 # 1️⃣ High-Level Architecture
 
-User (Stall/Field Capture)
+User (Field or Stall Mode)
         |
-        |  (POST interaction)
+        | Capture Card Image (Camera or Upload)
         ↓
-Next.js API Layer
+Frontend (Next.js PWA)
         |
-        |-- Upload Audio → MinIO
-        |
-        |-- Insert Interaction → PostgreSQL
-        |
-        |-- Insert AI Job → PostgreSQL
+        | Image Preprocessing
         ↓
-ai_jobs (status = pending)
-
-AI Worker (Future)
+Tesseract.js (Client-Side OCR)
         |
-        |-- Poll ai_jobs
-        |-- Process interaction
-        |-- Update transcript + snapshot
-        |-- Mark job complete
+        | Raw Extracted Text
+        ↓
+Text Parsing Engine (Regex + Heuristics)
+        |
+        | Structured Contact Object
+        ↓
+Contact Form (Prefilled)
+        |
+        | User Edits/Confirms
+        ↓
+Save to IndexedDB (Offline)
+        |
+        | Sync Later to Backend
+
+IMPORTANT:
+OCR runs entirely on client-side.
+No network required.
 
 ---
 
-# 2️⃣ Core Design Principles
+# 2️⃣ Design Principles
 
-- Deterministic identity (phone UNIQUE constraint)
-- Interactions are append-only
-- Audio stored in object storage (MinIO)
-- AI jobs are asynchronous
-- API never waits for AI completion
-- Job processing must be idempotent
-- Failures must not corrupt CRM state
-
----
-
-# 3️⃣ Database Design (Required Tables)
-
-## Contacts
-
-CREATE TABLE contacts (
-    id UUID PRIMARY KEY,
-    name TEXT,
-    email TEXT,
-    phone TEXT UNIQUE NOT NULL,
-    current_stage TEXT DEFAULT 'Met',
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW()
-);
-
-## Interactions (Append-Only)
-
-CREATE TABLE interactions (
-    id UUID PRIMARY KEY,
-    contact_id UUID REFERENCES contacts(id),
-    audio_object_key TEXT,
-    transcript TEXT,
-    structured_snapshot JSONB,
-    tags JSONB,
-    created_by TEXT,
-    created_at TIMESTAMP DEFAULT NOW()
-);
-
-## AI Jobs
-
-CREATE TABLE ai_jobs (
-    id UUID PRIMARY KEY,
-    interaction_id UUID REFERENCES interactions(id),
-    status TEXT DEFAULT 'pending',
-    retry_count INT DEFAULT 0,
-    created_at TIMESTAMP DEFAULT NOW()
-);
+- Offline-first (no server OCR calls)
+- Deterministic parsing
+- Phone number required for save
+- User confirmation mandatory
+- Fast processing
+- Lightweight UI
+- Progressive enhancement (manual fallback always available)
 
 ---
 
-# 4️⃣ End-to-End Flow
+# 3️⃣ Tech Stack
 
-## Step 1: User Creates Interaction
+Frontend:
+- Next.js 15
+- WebRTC getUserMedia (camera)
+- Tesseract.js
+- Canvas API (image preprocessing)
+- Regex-based parsing
+- IndexedDB (Dexie.js)
 
-Frontend sends:
+No backend OCR.
+No cloud APIs.
+No paid tools.
 
-POST /api/interactions
+---
 
-Payload (multipart/form-data):
+# 4️⃣ OCR Processing Flow
+
+## Step 1: Capture Image
+
+Options:
+- Camera capture (preferred)
+- Image upload fallback
+
+Use:
+navigator.mediaDevices.getUserMedia()
+
+Save image as:
+- Base64
+- Blob
+- Canvas image
+
+---
+
+## Step 2: Image Preprocessing (Critical for Accuracy)
+
+Before OCR:
+
+1. Convert to grayscale
+2. Increase contrast
+3. Resize if too large
+4. Crop unnecessary margins
+5. Optional: Edge detection
+
+Use:
+Canvas API
+
+Pseudo-flow:
+
+const canvas = document.createElement("canvas");
+const ctx = canvas.getContext("2d");
+
+ctx.drawImage(image, 0, 0);
+applyGrayscale();
+increaseContrast();
+
+---
+
+## Step 3: Run Tesseract.js
+
+Example:
+
+import Tesseract from 'tesseract.js';
+
+const result = await Tesseract.recognize(
+  imageBlob,
+  'eng',
+  { logger: m => console.log(m) }
+);
+
+const rawText = result.data.text;
+
+Important:
+- Show loading indicator
+- Do NOT freeze UI thread
+- Use Web Worker version of Tesseract
+
+---
+
+# 5️⃣ Text Parsing Engine (Critical Layer)
+
+Tesseract gives messy text.
+You must structure it.
+
+## Parsing Strategy
+
+Extract:
+
+- Phone number
+- Email
+- Name
+- Company
+- Designation
+
+---
+
+## Phone Extraction (Highest Priority)
+
+Regex:
+
+const phoneRegex = /(\+?\d{1,3}[\s-]?)?\d{10}/g;
+
+Rules:
+- Remove spaces/dashes
+- Normalize country code
+- Convert to consistent format
+
+Phone is mandatory.
+
+---
+
+## Email Extraction
+
+const emailRegex = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i;
+
+---
+
+## Name Heuristic
+
+Heuristic approach:
+- First line of card
+- Capitalized words
+- Not containing numbers
+- Not email
+- Not company suffix (Pvt Ltd, LLP)
+
+---
+
+## Company Detection
+
+Look for keywords:
+- Pvt
+- Ltd
+- LLP
+- Inc
+- Advisors
+- Capital
+- Finance
+
+---
+
+## Output Format
 
 {
-  contact_id: UUID,
-  audio_file: file (optional),
-  tags: JSON,
-  created_by: string
+  name: string | null,
+  phone: string | null,
+  email: string | null,
+  company: string | null,
+  designation: string | null,
+  raw_text: string
 }
 
 ---
 
-## Step 2: Backend Interaction API Logic
+# 6️⃣ Identity Handling Integration
 
-### Pseudocode
+After extraction:
 
-1. Validate contact exists.
-2. Generate interaction_id (UUID).
-3. If audio exists:
-     - Generate object key:
-         interactions/{interaction_id}.wav
-     - Upload to MinIO bucket.
-4. Insert interaction row into DB.
-5. Insert AI job row (status = pending).
-6. Return success.
+if (phone exists in local IndexedDB OR DB):
+    show warning:
+    "This contact already exists."
+    display:
+        - Previous RM
+        - Last interaction
+else:
+    allow save
 
----
-
-## 5️⃣ Exact API Flow
-
-### POST /api/interactions
-
-Request:
-- contact_id (required)
-- audio_file (optional)
-- tags (optional)
-
-Server Logic:
-
-if (!contact_exists(contact_id)) {
-    throw Error("Invalid contact");
-}
-
-interaction_id = uuid();
-
-if (audio_file) {
-    object_key = `interactions/${interaction_id}.wav`;
-    upload_to_minio(object_key, audio_file);
-}
-
-INSERT INTO interactions (
-    id,
-    contact_id,
-    audio_object_key,
-    tags,
-    created_by
-);
-
-INSERT INTO ai_jobs (
-    id,
-    interaction_id,
-    status
-) VALUES (
-    uuid(),
-    interaction_id,
-    'pending'
-);
-
-return { success: true };
+Phone is deterministic key.
+No fuzzy dedup.
 
 ---
 
-# 6️⃣ MinIO Integration
+# 7️⃣ UI Flow
 
-## Bucket Structure
+User → Scan Card
+→ OCR Processing Screen
+→ Structured Preview Screen
+→ Editable Fields
+→ Confirm & Save
 
-Bucket Name:
-- interactions-audio
-
-Object Key Pattern:
-- interactions/{interaction_id}.wav
-
-## Security
-
-- Private bucket
-- No public access
-- Signed URL when needed
+Important:
+User MUST confirm.
+Never auto-save blindly.
 
 ---
 
-# 7️⃣ AI Job Scheduling Model
+# 8️⃣ Offline Handling
 
-AI jobs are created immediately after interaction insertion.
+- OCR runs offline.
+- Extracted contact saved in IndexedDB.
+- Mark pending_sync = true.
+- Sync later via Sync Engine.
 
-### Job Lifecycle States
-
-- pending
-- processing
-- completed
-- failed
-
-### Important
-
-The API must NEVER:
-- Wait for transcription
-- Wait for LLM
-- Block response
-
-Job creation is fire-and-forget.
+No network dependency.
 
 ---
 
-# 8️⃣ Idempotency Rules
+# 9️⃣ Performance Targets
 
-If API retries:
+- Image capture: < 1s
+- OCR processing: 2–5s
+- Parsing: < 100ms
+- Total time: < 6 seconds
 
-- Do not create duplicate interactions.
-- Use unique interaction_id generation before insert.
-- Ensure AI job linked only once.
-
-Future AI worker must:
-
-- Check job status before processing.
-- Avoid double-processing.
-
----
-
-# 9️⃣ Error Handling
-
-If MinIO upload fails:
-- Do NOT insert interaction.
-- Return error.
-
-If interaction insert fails:
-- Do NOT create AI job.
-
-If AI job insert fails:
-- Log error.
-- Return success but mark AI disabled.
-
-CRM must remain usable.
+If slower:
+- Resize image before OCR
+- Limit resolution
+- Reduce preprocessing complexity
 
 ---
 
-# 🔟 Logging Strategy
+# 🔟 Error Handling
 
-Log:
+If OCR fails:
+- Show "Low confidence. Please enter manually."
+- Allow manual entry
 
-- Interaction creation time
-- Audio upload duration
-- Job creation success
-- Error details
+If phone not detected:
+- Prompt: "Please enter phone number manually."
 
-Log format:
-
-{
-  event: "interaction_created",
-  interaction_id: UUID,
-  contact_id: UUID,
-  has_audio: true/false,
-  timestamp: ISO8601
-}
+Never block capture.
 
 ---
 
-# 1️⃣1️⃣ Manual Testing Strategy
+# 1️⃣1️⃣ Security & Privacy
 
-Before AI worker exists:
-
-1. Create contact manually.
-2. Use Postman to POST interaction.
-3. Verify:
-   - Audio uploaded in MinIO.
-   - Interaction row created.
-   - ai_job row created.
-4. Insert dummy transcript manually.
-5. Confirm system integrity.
+- No image sent to server.
+- OCR entirely client-side.
+- No cloud dependency.
+- Raw image not stored unless confirmed.
+- Delete image after extraction (optional).
 
 ---
 
-# 1️⃣2️⃣ Future AI Worker Compatibility
+# 1️⃣2️⃣ File Structure
 
-AI worker will:
-
-1. Poll ai_jobs:
-   SELECT * FROM ai_jobs
-   WHERE status = 'pending'
-   FOR UPDATE SKIP LOCKED
-   LIMIT 1;
-
-2. Fetch interaction.
-3. Fetch audio from MinIO.
-4. Process.
-5. Update interaction:
-   - transcript
-   - structured_snapshot
-6. Mark job complete.
-
-No API changes required later.
+frontend/
+│
+├── modules/
+│   ├── ocr/
+│   │   ├── CardScanner.tsx
+│   │   ├── ImageProcessor.ts
+│   │   ├── OcrService.ts
+│   │   ├── TextParser.ts
+│   │   └── IdentityCheck.ts
+│
 
 ---
 
-# 1️⃣3️⃣ Sequence Diagram
-
-User → API → MinIO → Postgres (interaction) → Postgres (ai_job)
-
-Later:
-
-AI Worker → Postgres (fetch job)
-AI Worker → MinIO (get audio)
-AI Worker → Postgres (update interaction)
-AI Worker → Postgres (mark job complete)
-
----
-
-# 1️⃣4️⃣ Development Order
+# 1️⃣3️⃣ Development Order
 
 Phase 1:
-- DB tables
-- MinIO setup
+- Camera capture component
 
 Phase 2:
-- Interaction API
-- Audio upload logic
+- Integrate Tesseract.js
 
 Phase 3:
-- AI job insertion
+- Implement parsing engine
 
 Phase 4:
-- Manual job simulation
+- Prefill contact form
 
-AI worker built later.
+Phase 5:
+- Integrate identity check
 
----
-
-# 1️⃣5️⃣ Core Guarantee
-
-After this feature is complete:
-
-- Every audio interaction automatically creates an AI job.
-- AI worker can start immediately when implemented.
-- CRM is fully operational without AI.
-- System is scalable and safe.
+Phase 6:
+- Polish UX and performance
 
 ---
 
-# ✅ Definition of Done
+# 1️⃣4️⃣ Testing Strategy
 
-✔ Interaction API works  
-✔ Audio uploads to MinIO  
-✔ Interaction row created  
-✔ AI job row created  
-✔ No blocking operations  
-✔ Fully testable without frontend  
+Test with:
+
+- Clean printed cards
+- Noisy background
+- Tilted cards
+- Multiple phone numbers
+- Cards without phone
+- Cards with multiple emails
+- Low lighting
+- Blurry image
+
+Manually verify:
+- Phone detection accuracy
+- Email extraction
+- Name heuristic
 
 ---
 
-This document defines the exact system design and flow for the AI interaction ingestion and job scheduling feature.
+# 1️⃣5️⃣ Definition of Done
+
+✔ Camera capture works  
+✔ OCR works offline  
+✔ Text parsing extracts phone reliably  
+✔ Prefilled form editable  
+✔ Identity check works  
+✔ Saves offline  
+✔ Sync compatible  
+✔ UI responsive  
+
+---
+
+# 1️⃣6️⃣ Known Limitations
+
+- Fancy card designs may reduce OCR accuracy
+- Multi-language cards not supported (initially English only)
+- Manual correction always required
+
+---
+
+# 1️⃣7️⃣ Design Philosophy
+
+- Accuracy > automation
+- User confirmation mandatory
+- Deterministic identity > fuzzy matching
+- Offline-first is non-negotiable
+- Fast UX > complex preprocessing
+
+---
+
+# Final Outcome
+
+This OCR feature enables:
+
+- Fast stall capture
+- Fast field capture
+- Reduced manual typing
+- Deterministic identity resolution
+- Offline reliability
+- Seamless integration with Interaction + AI job pipeline
+
+This document defines the complete system design and implementation flow for the OCR card scanning feature.

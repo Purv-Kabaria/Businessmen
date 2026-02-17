@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -20,7 +20,11 @@ const formSchema = z.object({
 
 type FormValues = z.infer<typeof formSchema>;
 
-export function QuickCaptureForm() {
+interface QuickCaptureFormProps {
+    initialData?: Partial<FormValues> | null;
+}
+
+export function QuickCaptureForm({ initialData }: QuickCaptureFormProps) {
     const [isSaving, setIsSaving] = useState(false);
     const [success, setSuccess] = useState(false);
 
@@ -33,6 +37,19 @@ export function QuickCaptureForm() {
             company: "",
         },
     });
+
+    // Populate form when initialData changes (e.g. from OCR)
+    useEffect(() => {
+        if (initialData) {
+            form.reset({
+                name: initialData.name || "",
+                phone: initialData.phone || "",
+                email: initialData.email || "",
+                company: initialData.company || "",
+            });
+            toast.info("Form pre-filled from scan!");
+        }
+    }, [initialData, form]);
 
     async function onSubmit(data: FormValues) {
         setIsSaving(true);
