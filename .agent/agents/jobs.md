@@ -1,398 +1,334 @@
-# OCR Business Card Scanning Feature – System Design & Implementation Guide
+# Strategic Intelligence Simulator (SIS)
+## High-Performance Architecture using Haystack + FAISS + Gemma3:4b
 
 ---
 
-# 🎯 Objective
+# 🎯 Feature Overview
 
-Build an offline-first Business Card OCR scanning system for Stall + Field Mode that:
+The Strategic Intelligence Simulator (SIS) is a high-performance conversational modeling engine that:
 
-- Works without internet
-- Extracts structured contact information
-- Uses phone number as deterministic identity key
-- Pre-fills contact form automatically
-- Integrates cleanly with existing Interaction API
-- Is fast (≤ 3–5 seconds processing target)
-- Never blocks UI
+- Simulates the likely direction of the next sales call
+- Detects objection patterns and commitment gaps
+- Identifies repetition risks
+- Suggests strategic conversation flow
+- Flags cross-RM misalignment
+- Uses semantic retrieval instead of brute-force context stuffing
 
-This document defines the **exact architecture, flow, implementation steps, and constraints**.
+This is NOT revenue prediction.
 
----
-
-# 1️⃣ High-Level Architecture
-
-User (Field or Stall Mode)
-        |
-        | Capture Card Image (Camera or Upload)
-        ↓
-Frontend (Next.js PWA)
-        |
-        | Image Preprocessing
-        ↓
-Tesseract.js (Client-Side OCR)
-        |
-        | Raw Extracted Text
-        ↓
-Text Parsing Engine (Regex + Heuristics)
-        |
-        | Structured Contact Object
-        ↓
-Contact Form (Prefilled)
-        |
-        | User Edits/Confirms
-        ↓
-Save to IndexedDB (Offline)
-        |
-        | Sync Later to Backend
-
-IMPORTANT:
-OCR runs entirely on client-side.
-No network required.
+This is:
+Institutional strategic foresight powered by structured conversational intelligence.
 
 ---
 
-# 2️⃣ Design Principles
+# 🧠 Why This Feature Matters
 
-- Offline-first (no server OCR calls)
-- Deterministic parsing
-- Phone number required for save
-- User confirmation mandatory
-- Fast processing
-- Lightweight UI
-- Progressive enhancement (manual fallback always available)
+Sales Managers need:
+- Call preparation intelligence
+- Alignment control across RMs
+- Commitment tracking
+- Objection awareness
+- Messaging consistency
 
----
+RMs need:
+- Quick pre-call strategy
+- Risk detection
+- Conversation continuity
+- Avoidance of repetition
 
-# 3️⃣ Tech Stack
-
-Frontend:
-- Next.js 15
-- WebRTC getUserMedia (camera)
-- Tesseract.js
-- Canvas API (image preprocessing)
-- Regex-based parsing
-- IndexedDB (Dexie.js)
-
-No backend OCR.
-No cloud APIs.
-No paid tools.
+SIS transforms conversation history into strategic foresight.
 
 ---
 
-# 4️⃣ OCR Processing Flow
+# 🏗 High-Level System Architecture
 
-## Step 1: Capture Image
-
-Options:
-- Camera capture (preferred)
-- Image upload fallback
-
-Use:
-navigator.mediaDevices.getUserMedia()
-
-Save image as:
-- Base64
-- Blob
-- Canvas image
-
----
-
-## Step 2: Image Preprocessing (Critical for Accuracy)
-
-Before OCR:
-
-1. Convert to grayscale
-2. Increase contrast
-3. Resize if too large
-4. Crop unnecessary margins
-5. Optional: Edge detection
-
-Use:
-Canvas API
-
-Pseudo-flow:
-
-const canvas = document.createElement("canvas");
-const ctx = canvas.getContext("2d");
-
-ctx.drawImage(image, 0, 0);
-applyGrayscale();
-increaseContrast();
+                   ┌───────────────────────┐
+                   │   PostgreSQL (CRM)    │
+                   │  interactions table   │
+                   └───────────┬───────────┘
+                               │
+                               ▼
+                  ┌────────────────────────┐
+                  │ Embedding Generator    │
+                  │ (local model)          │
+                  └───────────┬────────────┘
+                              │
+                              ▼
+                  ┌────────────────────────┐
+                  │ FAISS Vector Index     │
+                  │ (Haystack DocumentStore)│
+                  └───────────┬────────────┘
+                              │
+                              ▼
+User Clicks "Simulate Call" → Query Retriever
+                              │
+                              ▼
+                 Relevant Interaction Chunks
+                              │
+                              ▼
+                 Prompt Builder (Context-Aware)
+                              │
+                              ▼
+                     Gemma3:4b Local Inference
+                              │
+                              ▼
+                  Structured JSON Strategy Output
+                              │
+                              ▼
+                        Next.js UI Renderer
 
 ---
 
-## Step 3: Run Tesseract.js
+# 🧩 Core Components
 
-Example:
+## 1️⃣ Embedding Pipeline
 
-import Tesseract from 'tesseract.js';
+- Extract structured_snapshot + key transcript segments
+- Generate embeddings (e.g., sentence-transformers)
+- Store embeddings in FAISS
+- Store interaction_id as metadata
 
-const result = await Tesseract.recognize(
-  imageBlob,
-  'eng',
-  { logger: m => console.log(m) }
-);
-
-const rawText = result.data.text;
-
-Important:
-- Show loading indicator
-- Do NOT freeze UI thread
-- Use Web Worker version of Tesseract
+Only relevant context is retrieved at runtime.
 
 ---
 
-# 5️⃣ Text Parsing Engine (Critical Layer)
+## 2️⃣ Vector Store (FAISS via Haystack)
 
-Tesseract gives messy text.
-You must structure it.
+- DocumentStore: FAISSDocumentStore
+- Stores:
+  - summary_points
+  - risk indicators
+  - commitments
+  - objections
+- Indexed by semantic similarity
 
-## Parsing Strategy
-
-Extract:
-
-- Phone number
-- Email
-- Name
-- Company
-- Designation
-
----
-
-## Phone Extraction (Highest Priority)
-
-Regex:
-
-const phoneRegex = /(\+?\d{1,3}[\s-]?)?\d{10}/g;
-
-Rules:
-- Remove spaces/dashes
-- Normalize country code
-- Convert to consistent format
-
-Phone is mandatory.
+Advantages:
+- Fast retrieval
+- GPU acceleration
+- Offline support
+- Scales efficiently
 
 ---
 
-## Email Extraction
+## 3️⃣ Context Aggregator
 
-const emailRegex = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i;
+When simulation is triggered:
 
----
-
-## Name Heuristic
-
-Heuristic approach:
-- First line of card
-- Capitalized words
-- Not containing numbers
-- Not email
-- Not company suffix (Pvt Ltd, LLP)
+1. Retrieve top-k relevant interaction chunks
+2. Merge structured insights
+3. Detect:
+   - Repeated objections
+   - Pending commitments
+   - Topic drift
+   - Risk shifts
+   - Cross-RM overlap
 
 ---
 
-## Company Detection
+## 4️⃣ Prompt Builder
 
-Look for keywords:
-- Pvt
-- Ltd
-- LLP
-- Inc
-- Advisors
-- Capital
-- Finance
+Input:
+- Retrieved interaction summaries
+- Current stage
+- Pending commitments
+- Risk profile
+- Communication preference
+
+Construct strict JSON instruction prompt:
+
+"You are simulating a strategic call preparation.
+Return ONLY valid JSON.
+Analyze likely objections, repetition risks,
+strategic flow, and alignment warnings."
 
 ---
 
-## Output Format
+## 5️⃣ Gemma3:4b Inference Layer
+
+Local model call via:
+- Ollama OR
+- llama.cpp server OR
+- custom HTTP wrapper
+
+Configuration:
+- temperature: 0.2
+- max_tokens: controlled
+- enforce JSON output
+
+Strict JSON schema required.
+
+---
+
+## 6️⃣ Output Schema
 
 {
-  name: string | null,
-  phone: string | null,
-  email: string | null,
-  company: string | null,
-  designation: string | null,
-  raw_text: string
+  "likely_objections": [],
+  "repetition_risks": [],
+  "strategic_sequence": [],
+  "tone_recommendation": "",
+  "alignment_warning": "",
+  "commitment_gaps": [],
+  "confidence_score": 0-100
 }
 
----
-
-# 6️⃣ Identity Handling Integration
-
-After extraction:
-
-if (phone exists in local IndexedDB OR DB):
-    show warning:
-    "This contact already exists."
-    display:
-        - Previous RM
-        - Last interaction
-else:
-    allow save
-
-Phone is deterministic key.
-No fuzzy dedup.
+All fields validated before return.
 
 ---
 
-# 7️⃣ UI Flow
+# 🔥 Feature Capabilities
 
-User → Scan Card
-→ OCR Processing Screen
-→ Structured Preview Screen
-→ Editable Fields
-→ Confirm & Save
+## ✅ Objection Prediction
+Based on historical concerns and sentiment drift.
 
-Important:
-User MUST confirm.
-Never auto-save blindly.
+## ✅ Commitment Gap Detection
+Detect promises made but not followed up.
 
----
+## ✅ Topic Repetition Risk
+Prevent reintroducing already-covered topics.
 
-# 8️⃣ Offline Handling
+## ✅ Cross-RM Alignment Warnings
+Flag contradictory messaging across team members.
 
-- OCR runs offline.
-- Extracted contact saved in IndexedDB.
-- Mark pending_sync = true.
-- Sync later via Sync Engine.
-
-No network dependency.
+## ✅ Strategic Flow Recommendation
+Provide recommended conversation structure.
 
 ---
 
-# 9️⃣ Performance Targets
+# 🚀 Performance Architecture
 
-- Image capture: < 1s
-- OCR processing: 2–5s
-- Parsing: < 100ms
-- Total time: < 6 seconds
+## Embedding Model
+- sentence-transformers (small, fast)
+- GPU-accelerated if available
 
-If slower:
-- Resize image before OCR
-- Limit resolution
-- Reduce preprocessing complexity
+## Index
+- FAISS flat index for small-medium dataset
+- IVF or HNSW for larger scale
 
----
+## Retrieval
+- top_k = 5–8
+- Avoid large prompt contexts
+- Token-efficient design
 
-# 🔟 Error Handling
+## Inference
+- Gemma3:4b local GPU
+- Controlled token size
+- Avoid entire transcript injection
 
-If OCR fails:
-- Show "Low confidence. Please enter manually."
-- Allow manual entry
-
-If phone not detected:
-- Prompt: "Please enter phone number manually."
-
-Never block capture.
-
----
-
-# 1️⃣1️⃣ Security & Privacy
-
-- No image sent to server.
-- OCR entirely client-side.
-- No cloud dependency.
-- Raw image not stored unless confirmed.
-- Delete image after extraction (optional).
+Latency Target:
+- Retrieval: <50ms
+- Inference: 1–3 seconds
+- Total Simulation: <4 seconds
 
 ---
 
-# 1️⃣2️⃣ File Structure
+# 🧠 Why Retrieval Is Critical
+
+Without retrieval:
+- Entire history fed to LLM
+- Slower inference
+- Token overload
+- Higher hallucination risk
+
+With retrieval:
+- Smaller context window
+- Faster responses
+- Better precision
+- Scalable system
+
+This is senior-level AI system design.
+
+---
+
+# 📦 Folder Structure
+
+ai-worker/
+│
+├── embeddings/
+│   └── embedder.py
+├── vector_store/
+│   └── faiss_store.py
+├── simulation/
+│   ├── aggregator.py
+│   ├── prompt_builder.py
+│   └── validator.py
+├── gemma/
+│   └── client.py
+├── job_runner.py
+└── main.py
 
 frontend/
 │
-├── modules/
-│   ├── ocr/
-│   │   ├── CardScanner.tsx
-│   │   ├── ImageProcessor.ts
-│   │   ├── OcrService.ts
-│   │   ├── TextParser.ts
-│   │   └── IdentityCheck.ts
-│
+├── app/
+│   └── contacts/[id]/simulate/
+│       └── page.tsx
 
 ---
 
-# 1️⃣3️⃣ Development Order
+# 🔄 Execution Flow
 
-Phase 1:
-- Camera capture component
-
-Phase 2:
-- Integrate Tesseract.js
-
-Phase 3:
-- Implement parsing engine
-
-Phase 4:
-- Prefill contact form
-
-Phase 5:
-- Integrate identity check
-
-Phase 6:
-- Polish UX and performance
+1. Contact page → User clicks "Simulate Call"
+2. Next.js calls:
+   GET /api/simulate/{contact_id}
+3. Backend:
+   - Retrieve embeddings
+   - Query FAISS
+   - Aggregate insights
+   - Build prompt
+   - Call Gemma
+   - Validate JSON
+4. Return structured simulation
+5. UI renders strategic intelligence cards
 
 ---
 
-# 1️⃣4️⃣ Testing Strategy
+# 🛡 Failure Handling
 
-Test with:
+If FAISS fails:
+- Fallback to last 3 interactions
 
-- Clean printed cards
-- Noisy background
-- Tilted cards
-- Multiple phone numbers
-- Cards without phone
-- Cards with multiple emails
-- Low lighting
-- Blurry image
+If LLM fails:
+- Return deterministic summary
 
-Manually verify:
-- Phone detection accuracy
-- Email extraction
-- Name heuristic
+If validation fails:
+- Retry once
+- Then fallback
+
+System must never block CRM usage.
 
 ---
 
-# 1️⃣5️⃣ Definition of Done
+# 🧠 Competitive Advantage
 
-✔ Camera capture works  
-✔ OCR works offline  
-✔ Text parsing extracts phone reliably  
-✔ Prefilled form editable  
-✔ Identity check works  
-✔ Saves offline  
-✔ Sync compatible  
-✔ UI responsive  
+This system:
 
----
+- Uses semantic retrieval
+- Uses structured intelligence
+- Avoids brute-force prompting
+- Is fully offline-capable
+- Is GPU-accelerated
+- Is scalable
+- Is architecturally sound
 
-# 1️⃣6️⃣ Known Limitations
+Mentor Talking Point:
 
-- Fancy card designs may reduce OCR accuracy
-- Multi-language cards not supported (initially English only)
-- Manual correction always required
+"We use retrieval-augmented strategic simulation instead of naive full-history prompting to ensure accuracy and performance."
 
 ---
 
-# 1️⃣7️⃣ Design Philosophy
+# 🏆 Definition of Done
 
-- Accuracy > automation
-- User confirmation mandatory
-- Deterministic identity > fuzzy matching
-- Offline-first is non-negotiable
-- Fast UX > complex preprocessing
+✔ Embeddings stored for all interactions  
+✔ FAISS index built and searchable  
+✔ Simulation endpoint functional  
+✔ JSON schema validated  
+✔ Latency <4s  
+✔ UI renders structured strategy  
 
 ---
 
-# Final Outcome
+# Final Positioning Statement
 
-This OCR feature enables:
+Strategic Intelligence Simulator converts historical conversational data into real-time strategic foresight using retrieval-augmented local LLM inference.
 
-- Fast stall capture
-- Fast field capture
-- Reduced manual typing
-- Deterministic identity resolution
-- Offline reliability
-- Seamless integration with Interaction + AI job pipeline
-
-This document defines the complete system design and implementation flow for the OCR card scanning feature.
+It does not predict revenue.
+It models relationship trajectory and prepares RMs for smarter calls.

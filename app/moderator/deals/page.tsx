@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
-import { Loader2, ArrowLeft, TrendingUp, Heart, Award, FileText, ChevronLeft, ChevronRight, Pencil, Check, X, Download, LayoutDashboard } from "lucide-react";
+import { Loader2, ChevronLeft, ChevronRight, Pencil, Check, X, Download } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
@@ -246,44 +246,44 @@ export default function ModeratorDealsPage() {
                         <BreadcrumbSeparator />
                         <BreadcrumbItem>
                             <BreadcrumbLink asChild>
+                                <Link href="/user">User</Link>
+                            </BreadcrumbLink>
+                        </BreadcrumbItem>
+                        <BreadcrumbSeparator />
+                        <BreadcrumbItem>
+                            <BreadcrumbLink asChild>
                                 <Link href="/moderator">Moderator</Link>
                             </BreadcrumbLink>
                         </BreadcrumbItem>
                         <BreadcrumbSeparator />
                         <BreadcrumbItem>
-                            <BreadcrumbPage>Deal Review</BreadcrumbPage>
+                            <BreadcrumbPage>Deal review</BreadcrumbPage>
                         </BreadcrumbItem>
                     </BreadcrumbList>
                 </Breadcrumb>
 
                 <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="flex items-center gap-3">
-                        <Link href="/moderator">
-                            <Button variant="outline" size="icon" className="shrink-0">
-                                <ArrowLeft className="h-4 w-4" />
-                            </Button>
-                        </Link>
-                        <div>
-                            <h1 className="text-2xl font-bold tracking-tight">Deal Review</h1>
-                            <p className="text-sm text-muted-foreground">Mark interactions as profitable, engaging, worthy and add remarks.</p>
+                    <div className="flex items-center gap-3 min-w-0">
+                        <Button variant="ghost" size="sm" asChild className="-ml-2 text-muted-foreground hover:text-foreground shrink-0">
+                            <Link href="/moderator">
+                                <ChevronLeft className="h-4 w-4 mr-1" /> Back
+                            </Link>
+                        </Button>
+                        <div className="min-w-0">
+                            <h1 className="text-xl font-semibold">Deal review</h1>
+                            <p className="text-sm text-muted-foreground">Review interactions and add verdicts or remarks.</p>
                         </div>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
-                    <Link href="/admin/dashboard">
-                        <Button variant="outline" size="sm" className="gap-1.5">
-                            <LayoutDashboard className="h-4 w-4" />
-                            Admin Dashboard
-                        </Button>
-                    </Link>
                     <Button
                         variant="outline"
                         size="sm"
-                        className="gap-1.5"
+                        className="gap-1.5 text-xs"
                         onClick={handleExportCSV}
                         disabled={isExporting}
                     >
-                        {isExporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-                        Download CSV
+                        {isExporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+                        Export CSV
                     </Button>
                     {pagination && (
                         <>
@@ -311,47 +311,31 @@ export default function ModeratorDealsPage() {
                     </div>
                 </div>
 
-                <div className="rounded-xl border bg-card overflow-hidden">
+                <div className="rounded-lg border overflow-hidden">
                     {loading && rows.length === 0 ? (
                         <div className="flex items-center justify-center py-16">
                             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                         </div>
                     ) : rows.length === 0 ? (
                         <div className="py-16 text-center text-muted-foreground">
-                            <p>No interactions to review yet.</p>
+                            <p className="text-sm">No interactions to review yet.</p>
                             <Link href="/moderator/audio">
-                                <Button variant="link" className="mt-2">Go to Audio Review</Button>
+                                <Button variant="outline" size="sm" className="mt-3">Go to Audio review</Button>
                             </Link>
                         </div>
                     ) : (
                         <Table>
                             <TableHeader>
-                                <TableRow>
-                                    <TableHead className="w-[140px]">Contact</TableHead>
-                                    <TableHead className="w-[120px]">Company</TableHead>
-                                    <TableHead className="w-[120px]">Phone</TableHead>
-                                    <TableHead className="w-[100px]">Date</TableHead>
-                                    <TableHead className="w-[140px]">
-                                        <span className="flex items-center gap-1.5">
-                                            <TrendingUp className="h-3.5 w-3.5" /> Profitable
-                                        </span>
-                                    </TableHead>
-                                    <TableHead className="w-[140px]">
-                                        <span className="flex items-center gap-1.5">
-                                            <Heart className="h-3.5 w-3.5" /> Engaging
-                                        </span>
-                                    </TableHead>
-                                    <TableHead className="w-[140px]">
-                                        <span className="flex items-center gap-1.5">
-                                            <Award className="h-3.5 w-3.5" /> Worthy
-                                        </span>
-                                    </TableHead>
-                                    <TableHead>
-                                        <span className="flex items-center gap-1.5">
-                                            <FileText className="h-3.5 w-3.5" /> Remarks
-                                        </span>
-                                    </TableHead>
-                                    <TableHead className="w-[140px] text-right">Actions</TableHead>
+                                <TableRow className="border-b">
+                                    <TableHead className="w-[140px] text-xs font-medium text-muted-foreground">Contact</TableHead>
+                                    <TableHead className="w-[120px] text-xs font-medium text-muted-foreground">Company</TableHead>
+                                    <TableHead className="w-[120px] text-xs font-medium text-muted-foreground">Phone</TableHead>
+                                    <TableHead className="w-[100px] text-xs font-medium text-muted-foreground">Date</TableHead>
+                                    <TableHead className="w-[140px] text-xs font-medium text-muted-foreground">Profitable</TableHead>
+                                    <TableHead className="w-[140px] text-xs font-medium text-muted-foreground">Engaging</TableHead>
+                                    <TableHead className="w-[140px] text-xs font-medium text-muted-foreground">Worthy</TableHead>
+                                    <TableHead className="text-xs font-medium text-muted-foreground">Remarks</TableHead>
+                                    <TableHead className="w-[140px] text-right text-xs font-medium text-muted-foreground">Actions</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>

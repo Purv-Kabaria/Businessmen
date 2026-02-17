@@ -5,6 +5,7 @@ import requests
 
 from api.ocr import router as ocr_router
 from api.transcribe import router as transcribe_router
+from api.simulation import router as simulation_router
 from utils.whisper_utils import whisper_model
 
 app = FastAPI(title="FinBridge OCR & Transcription Service")
@@ -26,6 +27,7 @@ app.add_middleware(
 # Include routers
 app.include_router(ocr_router, prefix="/api", tags=["OCR"])
 app.include_router(transcribe_router, prefix="/api", tags=["Transcription"])
+app.include_router(simulation_router, prefix="/api/simulation", tags=["Simulation"])
 
 
 @app.get("/")
@@ -41,11 +43,14 @@ async def root():
             "Edge case handling",
             "Smart name extraction",
             "10-digit phone normalization",
-            "Email validation"
+            "Email validation",
+            "Sales Intelligence Simulation (RAG + Gemma 3)"
         ],
         "endpoints": {
             "ocr": "/api/ocr",
             "transcribe": "/api/transcribe",
+            "simulate": "/api/simulation/simulate",
+            "embed": "/api/simulation/embed",
             "health": "/health"
         }
     }

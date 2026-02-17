@@ -79,16 +79,20 @@ export async function GET() {
       );
     }
 
-    const [totalUsers, totalModerators, totalAdmins] = await Promise.all([
+    const [totalUsers, totalModerators, totalAdmins, totalContacts, totalInteractions] = await Promise.all([
       prisma.user.count(),
       prisma.user.count({ where: { role: "MODERATOR" } }),
       prisma.user.count({ where: { role: "ADMIN" } }),
+      prisma.contact.count(),
+      prisma.interaction.count(),
     ]);
 
     const analytics = {
       totalUsers,
       totalModerators,
       totalAdmins,
+      totalContacts,
+      totalInteractions,
     };
 
     return createSuccessResponse(analytics);

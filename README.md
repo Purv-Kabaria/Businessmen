@@ -454,3 +454,4 @@ This document serves as the authoritative implementation guide for the AI coding
 
 cd python_backend
 venv\Scripts\activate
+uvicorn main:app --reload

@@ -3,8 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { motion } from "framer-motion";
-import { Loader2, Users, FileAudio, TrendingUp, LayoutDashboard } from "lucide-react";
+import { Loader2, Users, FileAudio, TrendingUp, ChevronLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -25,46 +24,37 @@ interface Analytics {
   totalUsers: number;
   totalModerators: number;
   totalAdmins: number;
+  totalContacts?: number;
+  totalInteractions?: number;
 }
 
 export default function ModeratorPage() {
   const router = useRouter();
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
-    const fetchData = async () => {
+    const fetchAnalytics = async () => {
       try {
-        const [analyticsRes, userRes] = await Promise.all([
-          fetch("/api/analytics/users"),
-          fetch("/api/user/read", { credentials: "include" }),
-        ]);
-        if (!analyticsRes.ok) {
-          router.push("/login");
-          return;
-        }
-        const result = await analyticsRes.json();
-        if (result.success && result.data) {
-          setAnalytics(result.data);
+        const response = await fetch("/api/analytics/users");
+        if (response.ok) {
+          const result = await response.json();
+          if (result.success && result.data) {
+            setAnalytics(result.data);
+          } else {
+            router.push("/login");
+          }
         } else {
           router.push("/login");
-          return;
-        }
-        if (userRes.ok) {
-          const userData = await userRes.json();
-          if (userData?.success && userData?.data?.role === "ADMIN") {
-            setIsAdmin(true);
-          }
         }
       } catch (error) {
-        console.error("Failed to fetch", error);
+        console.error("Failed to fetch analytics", error);
         router.push("/login");
       } finally {
         setIsLoading(false);
       }
     };
-    fetchData();
+    fetchAnalytics();
   }, [router]);
 
   if (isLoading) {
@@ -75,23 +65,8 @@ export default function ModeratorPage() {
     );
   }
 
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    visible: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.1,
-      },
-    },
-  };
-
-  const itemVariants = {
-    hidden: { y: 20, opacity: 0 },
-    visible: { y: 0, opacity: 1 },
-  };
-
   return (
-    <main className="min-h-screen bg-secondary p-4 sm:p-6 md:p-8">
+    <main className="min-h-screen bg-background p-4 sm:p-6 md:p-8">
       <div className="mx-auto max-w-7xl">
         <Breadcrumb className="mb-4 sm:mb-6">
           <BreadcrumbList className="text-xs sm:text-sm">
@@ -103,88 +78,129 @@ export default function ModeratorPage() {
             <BreadcrumbSeparator />
             <BreadcrumbItem>
               <BreadcrumbLink asChild>
-                <Link href="/user">User Dashboard</Link>
+                <Link href="/user">User</Link>
               </BreadcrumbLink>
             </BreadcrumbItem>
             <BreadcrumbSeparator />
             <BreadcrumbItem>
-              <BreadcrumbPage>Moderator Dashboard</BreadcrumbPage>
+              <BreadcrumbPage>Moderator</BreadcrumbPage>
             </BreadcrumbItem>
           </BreadcrumbList>
         </Breadcrumb>
 
-        <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-          <h1 className="text-3xl font-bold font-serif">Moderator Dashboard</h1>
-          {isAdmin && (
-            <Link href="/admin/dashboard">
-              <Button variant="outline" size="sm" className="gap-1.5">
-                <LayoutDashboard className="h-4 w-4" />
-                Admin Dashboard
-              </Button>
-            </Link>
-          )}
+        <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3">
+            <Button variant="ghost" size="sm" asChild className="-ml-2 text-muted-foreground hover:text-foreground">
+              <Link href="/user">
+                <ChevronLeft className="h-4 w-4 mr-1 shrink-0" /> Back
+              </Link>
+            </Button>
+            <h1 className="text-xl font-semibold">Moderator dashboard</h1>
+          </div>
         </div>
 
-        <div className="mt-12">
-          <h2 className="text-2xl font-semibold font-serif mb-4">Links</h2>
-          <motion.div
-            className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3"
-            variants={containerVariants}
-            initial="hidden"
-            animate="visible">
-            <motion.div variants={itemVariants} className="h-full">
-              <Link href="/moderator/users" className="block h-full">
-                <Card className="h-full flex flex-col hover:bg-accent hover:border-primary transition-colors cursor-pointer">
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Users className="h-5 w-5 text-primary" />
-                      Manage Users
-                    </CardTitle>
+        {analytics && (
+          <section className="mb-8">
+            <h2 className="text-sm font-medium text-muted-foreground mb-3">Overview</h2>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+              <Card className="border">
+                <CardHeader className="pb-1 pt-4 px-4">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">Total users</CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0 pb-4 px-4">
+                  <p className="text-2xl font-semibold">{analytics.totalUsers}</p>
+                </CardContent>
+              </Card>
+              <Card className="border">
+                <CardHeader className="pb-1 pt-4 px-4">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">Moderators</CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0 pb-4 px-4">
+                  <p className="text-2xl font-semibold">{analytics.totalModerators}</p>
+                </CardContent>
+              </Card>
+              <Card className="border">
+                <CardHeader className="pb-1 pt-4 px-4">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">Admins</CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0 pb-4 px-4">
+                  <p className="text-2xl font-semibold">{analytics.totalAdmins}</p>
+                </CardContent>
+              </Card>
+              {typeof analytics.totalContacts === "number" && (
+                <Card className="border">
+                  <CardHeader className="pb-1 pt-4 px-4">
+                    <CardTitle className="text-sm font-medium text-muted-foreground">Contacts</CardTitle>
                   </CardHeader>
-                  <CardContent className="flex-1">
-                    <p className="text-sm text-muted-foreground">
-                      View, create, edit, and delete users.
-                    </p>
+                  <CardContent className="pt-0 pb-4 px-4">
+                    <p className="text-2xl font-semibold">{analytics.totalContacts}</p>
                   </CardContent>
                 </Card>
-              </Link>
-            </motion.div>
-            <motion.div variants={itemVariants} className="h-full">
-              <Link href="/moderator/audio" className="block h-full">
-                <Card className="h-full flex flex-col hover:bg-accent hover:border-primary transition-colors cursor-pointer">
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <FileAudio className="h-5 w-5 text-primary" />
-                      Audio Review
-                    </CardTitle>
+              )}
+              {typeof analytics.totalInteractions === "number" && (
+                <Card className="border">
+                  <CardHeader className="pb-1 pt-4 px-4">
+                    <CardTitle className="text-sm font-medium text-muted-foreground">Interactions</CardTitle>
                   </CardHeader>
-                  <CardContent className="flex-1">
-                    <p className="text-sm text-muted-foreground">
-                      Listen to recorded interactions and view contact details.
-                    </p>
+                  <CardContent className="pt-0 pb-4 px-4">
+                    <p className="text-2xl font-semibold">{analytics.totalInteractions}</p>
                   </CardContent>
                 </Card>
-              </Link>
-            </motion.div>
-            <motion.div variants={itemVariants} className="h-full">
-              <Link href="/moderator/deals" className="block h-full">
-                <Card className="h-full flex flex-col hover:bg-accent hover:border-primary transition-colors cursor-pointer">
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <TrendingUp className="h-5 w-5 text-primary" />
-                      Deal Review
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="flex-1">
-                    <p className="text-sm text-muted-foreground">
-                      Mark interactions as profitable, engaging, worthy and add remarks in table form.
-                    </p>
-                  </CardContent>
-                </Card>
-              </Link>
-            </motion.div>
-          </motion.div>
-        </div>
+              )}
+            </div>
+          </section>
+        )}
+
+        <section>
+          <h2 className="text-sm font-medium text-muted-foreground mb-3">Actions</h2>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <Link href="/moderator/users">
+              <Card className="border hover:bg-muted/50 transition-colors cursor-pointer h-full">
+                <CardHeader className="pb-1 pt-4 px-4">
+                  <CardTitle className="text-base font-medium flex items-center gap-2">
+                    <Users className="h-4 w-4 text-muted-foreground" />
+                    Manage users
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0 pb-4 px-4">
+                  <p className="text-sm text-muted-foreground">
+                    View, create, edit, and delete users.
+                  </p>
+                </CardContent>
+              </Card>
+            </Link>
+            <Link href="/moderator/audio">
+              <Card className="border hover:bg-muted/50 transition-colors cursor-pointer h-full">
+                <CardHeader className="pb-1 pt-4 px-4">
+                  <CardTitle className="text-base font-medium flex items-center gap-2">
+                    <FileAudio className="h-4 w-4 text-muted-foreground" />
+                    Audio review
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0 pb-4 px-4">
+                  <p className="text-sm text-muted-foreground">
+                    Listen to recordings and view contact details.
+                  </p>
+                </CardContent>
+              </Card>
+            </Link>
+            <Link href="/moderator/deals">
+              <Card className="border hover:bg-muted/50 transition-colors cursor-pointer h-full">
+                <CardHeader className="pb-1 pt-4 px-4">
+                  <CardTitle className="text-base font-medium flex items-center gap-2">
+                    <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                    Deal review
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0 pb-4 px-4">
+                  <p className="text-sm text-muted-foreground">
+                    Review interactions and add verdicts or remarks.
+                  </p>
+                </CardContent>
+              </Card>
+            </Link>
+          </div>
+        </section>
       </div>
     </main>
   );

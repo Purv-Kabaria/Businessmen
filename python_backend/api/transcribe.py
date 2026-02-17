@@ -118,6 +118,26 @@ async def transcribe_audio(audio: UploadFile = File(...)):
             hotspots = analyze_hotspots(all_segments)
             print(f"[Transcribe] Found {len(hotspots)} important business hotspots.")
 
+            # --- ML Sentiment Analysis Integration ---
+            print("[Transcribe] Running Advanced ML Sentiment Engine...")
+            from utils.sentiment_engine import analyze_sentiment, analyze_emotions, analyze_conversation_flow, analyze_audio_emotion
+
+            # 1. Overall Text Sentiment (Positive/Neutral/Negative)
+            sentiment_data = analyze_sentiment(full_text)
+            
+            # 2. Granular Text Emotions (Joy, Anger, etc.)
+            emotions = analyze_emotions(full_text)
+            
+            # 3. Sentiment Flow (Trajectory)
+            sentiment_flow = analyze_conversation_flow(all_segments)
+            
+            # 4. Voice/Audio Emotion (SER) - The "Vibe Check"
+            print("[Transcribe] Running Voice Emotion Analysis (Wav2Vec2)...")
+            voice_emotion = analyze_audio_emotion(clean_path)
+
+            print(f"[Transcribe] Text Sentiment: {sentiment_data.get('sentiment')} (Score: {sentiment_data.get('score')})")
+            print(f"[Transcribe] Voice Emotion: {voice_emotion.get('primary_emotion')} (Score: {voice_emotion.get('score')})")
+
             processing_time = int((time.time() - start_time) * 1000)
 
             print(f"[Transcribe] Success ({processing_time}ms)")
@@ -130,6 +150,11 @@ async def transcribe_audio(audio: UploadFile = File(...)):
                     "segments": all_segments,
                     "hotspots": hotspots,
                     "language": combined_language,
+                    # New Sentiment Data
+                    "sentiment": sentiment_data,
+                    "emotions": emotions,
+                    "sentimentFlow": sentiment_flow,
+                    "voiceEmotion": voice_emotion
                 },
                 meta={
                     "processingTime": round((time.time() - start_time) * 1000, 2),
@@ -139,6 +164,7 @@ async def transcribe_audio(audio: UploadFile = File(...)):
                     "model": getattr(whisper_model, "model_size", "unknown"),
                     "device": getattr(whisper_model, "device", "unknown"),
                     "enhancement": "Smart Segmentation (25s) + Spectral Gating",
+                    "sentimentEngine": "RoBERTa (Text) + Wav2Vec2 (Audio)"
                 },
             )
 

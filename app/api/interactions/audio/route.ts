@@ -228,6 +228,26 @@ export async function PATCH(req: NextRequest) {
         // 4. Also update contact's transcript history/snapshot if needed?
         // (For now, just updating the interaction itself is the core requirement)
 
+        // 5. Trigger Embedding Pipeline (Fire and Forget)
+        if (updatedInteraction.transcript) {
+            const embeddingPayload = {
+                id: updatedInteraction.id,
+                text: updatedInteraction.transcript,
+                metadata: {
+                    contactId: updatedInteraction.contactId,
+                    date: updatedInteraction.createdAt.toISOString(),
+                    type: "audio"
+                }
+            };
+
+            // Non-blocking call to Python backend
+            fetch(`${process.env.PYTHON_BACKEND_URL || 'http://127.0.0.1:8000'}/api/simulation/embed`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(embeddingPayload)
+            }).catch(err => console.error("[API] Failed to trigger embedding:", err));
+        }
+
         return NextResponse.json({
             success: true,
             data: updatedInteraction
