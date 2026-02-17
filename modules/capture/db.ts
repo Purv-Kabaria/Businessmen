@@ -87,48 +87,9 @@ export async function getAllContacts(): Promise<ContactRecord[]> {
   });
 }
 
-export type UpdateContactPatch = Partial<Omit<ContactRecord, "local_id">>;
-
-export async function updateContact(local_id: string, patch: UpdateContactPatch): Promise<void> {
-  const db = await openDb();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_CONTACTS, "readwrite");
-    const store = tx.objectStore(STORE_CONTACTS);
-    const getReq = store.get(local_id);
-    getReq.onerror = () => {
-      db.close();
-      reject(getReq.error);
-    };
-    getReq.onsuccess = () => {
-      const existing = getReq.result as ContactRecord | undefined;
-      if (!existing) {
-        db.close();
-        reject(new Error(`Contact not found: ${local_id}`));
-        return;
-      }
-      const updated: ContactRecord = {
-        ...existing,
-        ...patch,
-        local_id: existing.local_id,
-        updated_at: Date.now(),
-      };
-      const putReq = store.put(updated);
-      putReq.onerror = () => {
-        db.close();
-        reject(putReq.error);
-      };
-      putReq.onsuccess = () => {
-        db.close();
-        resolve();
-      };
-    };
-  });
-}
-
 export async function getUnsyncedContacts(): Promise<ContactRecord[]> {
   const all = await getAllContacts();
-  const unsynced = all.filter((c) => c.pending_sync);
-  return unsynced.sort((a, b) => a.updated_at - b.updated_at);
+  return all.filter((c) => c.pending_sync);
 }
 
 export async function getDraft(mode: DraftMode): Promise<DraftData | null> {

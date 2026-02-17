@@ -1,18 +1,30 @@
 "use client";
 
-import { useRef, useState, useCallback } from "react";
-import { Scan, Upload } from "lucide-react";
+import { useState } from "react";
+import { Scan, TextSelect } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { CameraCapture } from "@/components/ocr/camera-capture";
+
+export type OCRData = {
+  name?: string;
+  phone?: string;
+  email?: string;
+  company?: string;
+};
+
+export type OCRResult = {
+  image: Blob;
+  data: OCRData;
+};
 
 export type CardScanButtonProps = {
-  onCaptured: (file: File) => void;
+  onCaptured: (result: OCRResult) => void;
   variant?: "default" | "outline" | "secondary" | "ghost" | "link" | "destructive";
   size?: "default" | "sm" | "lg" | "icon" | "icon-sm" | "icon-lg";
   className?: string;
@@ -26,158 +38,43 @@ export function CardScanButton({
   className,
   children,
 }: CardScanButtonProps) {
-  const uploadInputRef = useRef<HTMLInputElement>(null);
-  const scanInputRef = useRef<HTMLInputElement>(null);
-  const [choiceDialogOpen, setChoiceDialogOpen] = useState(false);
-  const [previewFile, setPreviewFile] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [previewDialogOpen, setPreviewDialogOpen] = useState(false);
+  const [open, setOpen] = useState(false);
 
-  const openChoiceDialog = useCallback(() => {
-    setChoiceDialogOpen(true);
-  }, []);
-
-  const triggerUpload = useCallback(() => {
-    setChoiceDialogOpen(false);
-    setTimeout(() => uploadInputRef.current?.click(), 100);
-  }, []);
-
-  const triggerScan = useCallback(() => {
-    setChoiceDialogOpen(false);
-    setTimeout(() => scanInputRef.current?.click(), 100);
-  }, []);
-
-  const handleFileChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      e.target.value = "";
-      if (!file || !file.type.startsWith("image/")) return;
-      if (previewUrl) URL.revokeObjectURL(previewUrl);
-      setPreviewUrl(URL.createObjectURL(file));
-      setPreviewFile(file);
-      setPreviewDialogOpen(true);
-    },
-    [previewUrl]
-  );
-
-  const handleRetake = useCallback(() => {
-    if (previewUrl) {
-      URL.revokeObjectURL(previewUrl);
-      setPreviewUrl(null);
-    }
-    setPreviewFile(null);
-    setPreviewDialogOpen(false);
-    setTimeout(() => setChoiceDialogOpen(true), 100);
-  }, [previewUrl]);
-
-  const handleUsePhoto = useCallback(() => {
-    if (previewFile) {
-      onCaptured(previewFile);
-    }
-    if (previewUrl) URL.revokeObjectURL(previewUrl);
-    setPreviewUrl(null);
-    setPreviewFile(null);
-    setPreviewDialogOpen(false);
-  }, [previewFile, previewUrl, onCaptured]);
-
-  const handleChoiceDialogOpenChange = useCallback((open: boolean) => {
-    setChoiceDialogOpen(open);
-  }, []);
-
-  const handlePreviewDialogOpenChange = useCallback(
-    (open: boolean) => {
-      if (!open && previewUrl) URL.revokeObjectURL(previewUrl);
-      setPreviewUrl(null);
-      setPreviewFile(null);
-      setPreviewDialogOpen(open);
-    },
-    [previewUrl]
-  );
+  const handleCapture = (result: any) => {
+    // result comes from CameraCapture as { image: Blob, data: any }
+    // Transform to our type if needed, or pass through
+    onCaptured(result);
+    setOpen(false);
+  };
 
   return (
     <>
-      <input
-        ref={uploadInputRef}
-        type="file"
-        accept="image/*"
-        className="hidden"
-        aria-hidden
-        onChange={handleFileChange}
-      />
-      <input
-        ref={scanInputRef}
-        type="file"
-        accept="image/*"
-        capture="environment"
-        className="hidden"
-        aria-hidden
-        onChange={handleFileChange}
-      />
       <Button
         type="button"
         variant={variant}
         size={size}
         className={className}
-        onClick={openChoiceDialog}
+        onClick={() => setOpen(true)}
       >
         {children ?? (
           <>
-            <Scan className="h-4 w-4" />
-            Scan card
+            <Scan className="mr-2 h-4 w-4" />
+            Scan / Upload Card
           </>
         )}
       </Button>
-      <Dialog open={choiceDialogOpen} onOpenChange={handleChoiceDialogOpenChange}>
-        <DialogContent showCloseButton={true}>
-          <DialogHeader>
-            <DialogTitle>Add card</DialogTitle>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-3xl h-[80vh] flex flex-col p-0 gap-0 overflow-hidden sm:rounded-lg">
+          <DialogHeader className="p-4 border-b">
+            <DialogTitle className="flex items-center gap-2">
+              <TextSelect className="h-5 w-5" />
+              Scan Business Card
+            </DialogTitle>
           </DialogHeader>
-          <div className="grid grid-cols-2 gap-3 py-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="lg"
-              className="flex h-auto flex-col gap-2 py-6"
-              onClick={triggerUpload}
-            >
-              <Upload className="h-8 w-8" />
-              Upload image
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="lg"
-              className="flex h-auto flex-col gap-2 py-6"
-              onClick={triggerScan}
-            >
-              <Scan className="h-8 w-8" />
-              Scan card
-            </Button>
+          <div className="flex-1 relative bg-black">
+            <CameraCapture onCapture={handleCapture} onClose={() => setOpen(false)} />
           </div>
-        </DialogContent>
-      </Dialog>
-      <Dialog open={previewDialogOpen} onOpenChange={handlePreviewDialogOpenChange}>
-        <DialogContent showCloseButton={true}>
-          <DialogHeader>
-            <DialogTitle>Preview</DialogTitle>
-          </DialogHeader>
-          {previewUrl && (
-            <div className="relative aspect-3/2 w-full overflow-hidden rounded-lg border bg-muted">
-              <img
-                src={previewUrl}
-                alt="Captured card"
-                className="h-full w-full object-contain"
-              />
-            </div>
-          )}
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={handleRetake}>
-              Retake
-            </Button>
-            <Button type="button" onClick={handleUsePhoto}>
-              Use photo
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
     </>

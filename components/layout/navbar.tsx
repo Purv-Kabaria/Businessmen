@@ -151,7 +151,7 @@ export function Navbar() {
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
                     onClick={handleLogout}
-                    className="cursor-pointer text-destructive dark:text-white focus:text-destructive">
+                    className="cursor-pointer text-destructive focus:text-destructive">
                     <LogOut className="mr-2 h-4 w-4" />
                     Log out
                   </DropdownMenuItem>
@@ -164,7 +164,7 @@ export function Navbar() {
                 className={`transition-all duration-300 shadow-sm rounded-md
       ${scrolled
                     ? "bg-primary-foreground text-primary hover:bg-primary-foreground/90"
-                    : "bg-primary text-primary-foreground hover:bg-chart-2"
+                    : "bg-primary text-primary-foreground hover:bg-primary/90"
                   }`}>
                 <Link href="/login">
                   <span className="flex items-center gap-2">
