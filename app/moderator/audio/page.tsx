@@ -37,8 +37,7 @@ export default function AudioReviewPage() {
     const [pagination, setPagination] = useState<PaginationInfo | null>(null);
     const [loading, setLoading] = useState(true);
     const [currentPage, setCurrentPage] = useState(1);
-    const [playingKey, setPlayingKey] = useState<string | null>(null);
-    const [audioElements, setAudioElements] = useState<Map<string, HTMLAudioElement>>(new Map());
+    const seekToOnLoadRef = useRef<number | null>(null);
     const [searchQuery, setSearchQuery] = useState("");
     const [debouncedSearch, setDebouncedSearch] = useState("");
     const [generatedTranscripts, setGeneratedTranscripts] = useState<Map<string, string>>(new Map());
@@ -343,12 +342,28 @@ export default function AudioReviewPage() {
     // Audio Player Effects & Handlers
     useEffect(() => {
         if (currentTrack && audioRef.current) {
-            setDuration(currentTrack.duration || null);
-            audioRef.current.src = currentTrack.url;
-            audioRef.current.load();
-            audioRef.current.play().then(() => setIsPlaying(true)).catch(e => {
-                console.log("Play failed", e);
-            });
+            const seekTo = seekToOnLoadRef.current;
+            seekToOnLoadRef.current = null;
+            const el = audioRef.current;
+            const onReady = () => {
+                const d = el.duration;
+                if (d != null && !isNaN(d) && d !== Infinity) {
+                    setDuration(d);
+                }
+                if (seekTo != null) {
+                    const safeTime = (d != null && !isNaN(d) && d !== Infinity)
+                        ? Math.min(seekTo, Math.max(0, d))
+                        : Math.max(0, seekTo);
+                    el.currentTime = safeTime;
+                    setProgress(safeTime);
+                }
+                el.play().then(() => setIsPlaying(true)).catch(e => {
+                    console.log("Play failed", e);
+                });
+            };
+            el.src = currentTrack.url;
+            el.addEventListener("loadedmetadata", onReady, { once: true });
+            el.load();
         }
     }, [currentTrack]);
 
@@ -402,13 +417,14 @@ export default function AudioReviewPage() {
         return `${mins}:${secs.toString().padStart(2, '0')}`;
     };
 
-    function playTrack(interaction: AudioInteraction) {
+    function playTrack(interaction: AudioInteraction, seekToSeconds?: number) {
         const index = selectedAudioIndices[interaction.id] || 0;
         const url = interaction.audioUrls?.[index] ?? null;
         if (!url) {
             toast.error("No audio available");
             return;
         }
+        if (seekToSeconds != null) seekToOnLoadRef.current = seekToSeconds;
         setCurrentTrack({
             id: interaction.id,
             url,
@@ -418,40 +434,8 @@ export default function AudioReviewPage() {
         });
     }
 
-    function handlePlayToggle(interaction: AudioInteraction, index: number) {
-        const key = `${interaction.id}-${index}`;
-        const url = interaction.audioUrls[index];
-        if (!url) {
-            toast.error("Audio URL not available");
-            return;
-        }
-
-        if (playingKey && playingKey !== key) {
-            const currentAudio = audioElements.get(playingKey);
-            if (currentAudio) {
-                currentAudio.pause();
-                currentAudio.currentTime = 0;
-            }
-        }
-
-        let audio = audioElements.get(key);
-        if (!audio) {
-            audio = new Audio(url);
-            audio.onended = () => setPlayingKey(null);
-            audio.onerror = () => {
-                toast.error("Failed to load audio");
-                setPlayingKey(null);
-            };
-            setAudioElements(new Map(audioElements.set(key, audio)));
-        }
-
-        if (playingKey === key) {
-            audio.pause();
-            setPlayingKey(null);
-        } else {
-            audio.play().catch(() => toast.error("Failed to play audio"));
-            setPlayingKey(key);
-        }
+    function handlePause() {
+        setIsPlaying(false);
     }
 
     if (loading && interactions.length === 0) {
@@ -571,15 +555,14 @@ export default function AudioReviewPage() {
                                 key={interaction.id}
                                 interaction={interaction}
                                 onPlay={playTrack}
+                                onPause={handlePause}
                                 onTranscribe={handleTranscribe}
-                                onPlayToggle={handlePlayToggle}
                                 onReviewTranscript={(i) => {
                                     setActiveInteractionId(i.id);
                                     setIsTranscriptOpen(true);
                                 }}
                                 isPlaying={(id) => currentTrack?.id === id && isPlaying}
                                 isTranscribing={transcribingId === interaction.id}
-                                playingKey={playingKey}
                                 selectedAudioIndex={selectedAudioIndices[interaction.id] || 0}
                                 setSelectedAudioIndex={(idx) => setSelectedAudioIndices(prev => ({ ...prev, [interaction.id]: idx }))}
                             />
@@ -624,11 +607,15 @@ export default function AudioReviewPage() {
                 interaction={interactions.find(i => i.id === activeInteractionId) || null}
                 generatedTranscript={activeInteractionId ? generatedTranscripts.get(activeInteractionId) : undefined}
                 onSummarize={handleSummarize}
-                onPlay={playTrack}
-                onSeek={(val) => {
+                onSeek={(seconds) => {
+                    const active = interactions.find(i => i.id === activeInteractionId);
+                    if (!active) return;
                     if (currentTrack?.id === activeInteractionId && audioRef.current) {
-                        audioRef.current.currentTime = val;
-                        setProgress(val);
+                        audioRef.current.currentTime = seconds;
+                        setProgress(seconds);
+                        audioRef.current.play().then(() => setIsPlaying(true)).catch(() => {});
+                    } else {
+                        playTrack(active, seconds);
                     }
                 }}
                 isSummarizing={!!summarizingId}

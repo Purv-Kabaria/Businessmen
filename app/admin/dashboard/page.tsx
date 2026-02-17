@@ -111,12 +111,12 @@ export default function AdminDashboardPage() {
                         <BreadcrumbSeparator />
                         <BreadcrumbItem>
                             <BreadcrumbLink asChild>
-                                <Link href="/admin/dashboard">Admin</Link>
+                                <Link href="/user">User Dashboard</Link>
                             </BreadcrumbLink>
                         </BreadcrumbItem>
                         <BreadcrumbSeparator />
                         <BreadcrumbItem>
-                            <BreadcrumbPage>Dashboard</BreadcrumbPage>
+                            <BreadcrumbPage>Admin</BreadcrumbPage>
                         </BreadcrumbItem>
                     </BreadcrumbList>
                 </Breadcrumb>

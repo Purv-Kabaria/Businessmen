@@ -17,12 +17,11 @@ import { AudioAnalysisDashboard } from "./audio-analysis-dashboard";
 interface AudioInteractionCardProps {
     interaction: AudioInteraction;
     onPlay: (interaction: AudioInteraction) => void;
+    onPause: () => void;
     onTranscribe: (interaction: AudioInteraction) => void;
-    onPlayToggle: (interaction: AudioInteraction, index: number) => void;
     onReviewTranscript: (interaction: AudioInteraction) => void;
     isPlaying: (interactionId: string) => boolean;
     isTranscribing: boolean;
-    playingKey: string | null;
     selectedAudioIndex: number;
     setSelectedAudioIndex: (index: number) => void;
 }
@@ -30,17 +29,17 @@ interface AudioInteractionCardProps {
 export function AudioInteractionCard({
     interaction,
     onPlay,
+    onPause,
     onTranscribe,
-    onPlayToggle,
     onReviewTranscript,
     isPlaying,
     isTranscribing,
-    playingKey,
     selectedAudioIndex,
     setSelectedAudioIndex
 }: AudioInteractionCardProps) {
     const displayTranscript = interaction.transcript;
     const isCurrentTrackPlaying = isPlaying(interaction.id);
+    const url = interaction.audioUrls[selectedAudioIndex];
 
     return (
         <Card className="overflow-hidden min-w-0 max-w-full">
@@ -79,44 +78,25 @@ export function AudioInteractionCard({
                                         ))}
                                     </SelectContent>
                                 </Select>
+                            ) : interaction.audioUrls.length === 1 ? null : null}
+                            {interaction.audioUrls.length === 0 ? (
+                                <span className="text-xs text-muted-foreground mr-1">No audio files found</span>
                             ) : (
-                                <span className="text-xs text-muted-foreground">Single audio</span>
+                                <Button
+                                    onClick={() => isCurrentTrackPlaying ? onPause() : onPlay(interaction)}
+                                    size="sm"
+                                    disabled={!url}
+                                    variant="outline"
+                                    className={`h-8 w-[90px] text-xs border border-primary/40 transition-colors focus:ring-0 focus-visible:ring-0 hover:bg-primary/10 ${isCurrentTrackPlaying ? "bg-primary text-white" : ""}`}
+                                >
+                                    {isCurrentTrackPlaying ? (
+                                        <><Pause className="h-3.5 w-3.5 mr-1.5" /> Pause</>
+                                    ) : (
+                                        <><Play className="h-3.5 w-3.5 mr-1.5" /> Play</>
+                                    )}
+                                </Button>
                             )}
-
-                            {(() => {
-                                const key = `${interaction.id}-${selectedAudioIndex}`;
-                                const isItemPlaying = playingKey === key;
-                                const url = interaction.audioUrls[selectedAudioIndex];
-
-                                return (
-                                    <Button
-  onClick={() => onPlayToggle(interaction, selectedAudioIndex)}
-  size="sm"
-  disabled={!url}
-  variant="outline"
-  className={`
-    h-8 w-[90px] 
-    text-xs
-    border border-primary/40
-    transition-colors duration-200
-    focus:ring-0 focus-visible:ring-0
-    hover:bg-primary/10
-    ${isItemPlaying ? "bg-primary text-white" : ""}
-  `}
->
-
-                                        {isItemPlaying ? (
-                                            <><Pause className="h-3.5 w-3.5 mr-1.5" /> Pause</>
-                                        ) : (
-                                            <><Play className="h-3.5 w-3.5 mr-1.5" /> Play</>
-                                        )}
-                                    </Button>
-                                );
-                            })()}
                         </div>
-                        {interaction.audioUrls.length === 0 && (
-                            <span className="text-xs text-muted-foreground mr-1">No audio files found</span>
-                        )}
                     </div>
                 </div>
             </CardHeader>
@@ -135,18 +115,6 @@ export function AudioInteractionCard({
                         </div>
 
                         <div className="flex flex-wrap items-center gap-2">
-                            <Button
-                                variant={isCurrentTrackPlaying ? "secondary" : "default"}
-                                size="sm"
-                                onClick={() => onPlay(interaction)}
-                                className="h-8 text-xs"
-                            >
-                                {isCurrentTrackPlaying ? (
-                                    <><Pause className="h-3 w-3 mr-1.5" /> Pause</>
-                                ) : (
-                                    <><Play className="h-3 w-3 mr-1.5" /> Play</>
-                                )}
-                            </Button>
                             <Button
                                 variant="outline"
                                 size="sm"
