@@ -157,3 +157,79 @@ export async function GET(req: NextRequest) {
         );
     }
 }
+
+export async function PATCH(req: NextRequest) {
+    try {
+        // 1. Verify authentication (Similar to GET)
+        const token = req.cookies.get("token")?.value;
+        if (!token) {
+            return NextResponse.json(
+                { success: false, error: { message: "Unauthorized" } },
+                { status: 401 }
+            );
+        }
+
+        const jwtSecret = process.env.JWT_SECRET;
+        if (!jwtSecret) {
+            return NextResponse.json(
+                { success: false, error: { message: "Server configuration error" } },
+                { status: 500 }
+            );
+        }
+
+        const secret = new TextEncoder().encode(jwtSecret);
+        const { payload } = await jwtVerify(token, secret);
+        const userRole = (payload as any).role;
+
+        if (!["MODERATOR", "ADMIN"].includes(userRole)) {
+            return NextResponse.json(
+                { success: false, error: { message: "Forbidden" } },
+                { status: 403 }
+            );
+        }
+
+        // 2. Parse request body
+        const body = await req.json();
+        const { interactionId, transcript, structuredSnapshot } = body;
+
+        if (!interactionId) {
+            return NextResponse.json(
+                { success: false, error: { message: "Missing required fields" } },
+                { status: 400 }
+            );
+        }
+
+        // 3. Update interaction in database
+        const updateData: any = {};
+        if (transcript !== undefined) updateData.transcript = transcript;
+        if (structuredSnapshot !== undefined) updateData.structuredSnapshot = structuredSnapshot;
+
+        const updatedInteraction = await prisma.interaction.update({
+            where: { id: interactionId },
+            data: updateData,
+            include: {
+                contact: true
+            }
+        });
+
+        // 4. Also update contact's transcript history/snapshot if needed?
+        // (For now, just updating the interaction itself is the core requirement)
+
+        return NextResponse.json({
+            success: true,
+            data: updatedInteraction
+        });
+
+    } catch (error: any) {
+        console.error("[API /api/interactions/audio] PATCH Error:", error);
+        return NextResponse.json(
+            {
+                success: false,
+                error: {
+                    message: error.message || "Failed to update transcription",
+                },
+            },
+            { status: 500 }
+        );
+    }
+}

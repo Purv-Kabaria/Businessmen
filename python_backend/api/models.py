@@ -18,6 +18,18 @@ class ContactData(BaseModel):
 
 class TranscriptionResponse(BaseModel):
     success: bool
-    data: dict
-    meta: dict
+    data: Optional[dict] = None
+    meta: Optional[dict] = None
+    error: Optional[str] = None
+
+
+class SummarizeRequest(BaseModel):
+    text: str
+    model: Optional[str] = "gemma3:4b"
+
+
+class SummarizeResponse(BaseModel):
+    success: bool
+    summary: str
+    meta: Optional[dict] = None
     error: Optional[str] = None

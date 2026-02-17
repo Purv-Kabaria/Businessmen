@@ -3,7 +3,7 @@ import time
 import tempfile
 import os
 
-from api.models import TranscriptionResponse
+from api.models import TranscriptionResponse, SummarizeRequest, SummarizeResponse
 from utils.whisper_utils import whisper_model
 from utils.audio_preprocess import preprocess_audio
 
@@ -59,6 +59,7 @@ async def transcribe_audio(audio: UploadFile = File(...)):
             )
             
             full_transcript_parts = []
+            all_segments = []
             combined_language = "en" 
             total_duration = 0.0
             
@@ -66,14 +67,15 @@ async def transcribe_audio(audio: UploadFile = File(...)):
             
             for i, seg in enumerate(audio_segments):
                 seg_path = seg['path']
+                seg_start_sec = seg.get('start_ms', 0) / 1000.0
                 seg_duration = seg.get('duration_ms', 0) / 1000.0
                 total_duration += seg_duration
                 
-                print(f"  > Segment {i+1}/{len(audio_segments)} ({seg_duration:.2f}s)...")
+                print(f"  > Segment {i+1}/{len(audio_segments)} (Offset: {seg_start_sec:.2f}s, Duration: {seg_duration:.2f}s)...")
                 
                 try:
                     # Transcribe independent segment
-                    # We still use VAD inside for safety, but the main work is done by physical splitting
+                    # word_timestamps=False is fine, we want sentence/phrase segments
                     segments, info = whisper_model.transcribe(
                         seg_path,
                         beam_size=5,
@@ -83,18 +85,25 @@ async def transcribe_audio(audio: UploadFile = File(...)):
                         word_timestamps=False,
                     )
                     
-                    seg_text = " ".join([s.text.strip() for s in segments])
+                    for s in segments:
+                        text = s.text.strip()
+                        if text:
+                            # Adjust timestamps based on the chunk's offset in the original file
+                            all_segments.append({
+                                "text": text,
+                                "start": round(s.start + seg_start_sec, 2),
+                                "end": round(s.end + seg_start_sec, 2),
+                            })
+                            full_transcript_parts.append(text)
                     
-                    if seg_text:
-                        full_transcript_parts.append(seg_text)
-                        if i == 0: combined_language = info.language
+                    if i == 0: combined_language = info.language
                 
                 except Exception as e_seg:
                     print(f"  [!] Failed to transcribe segment {i}: {e_seg}")
                     continue
 
                 finally:
-                    # Cleanup segment temp file immediately to save space
+                    # Cleanup segment temp file immediately
                     if seg_path != clean_path and os.path.exists(seg_path):
                         try:
                             os.unlink(seg_path)
@@ -103,6 +112,12 @@ async def transcribe_audio(audio: UploadFile = File(...)):
 
             full_text = " ".join(full_transcript_parts)
             
+            # Identify hotspots (business intelligence: financial, brand, contact details)
+            print("[Transcribe] Analyzing business intelligence hotspots with gemma3...")
+            from utils.llm_utils import analyze_hotspots
+            hotspots = analyze_hotspots(all_segments)
+            print(f"[Transcribe] Found {len(hotspots)} important business hotspots.")
+
             processing_time = int((time.time() - start_time) * 1000)
 
             print(f"[Transcribe] Success ({processing_time}ms)")
@@ -112,12 +127,14 @@ async def transcribe_audio(audio: UploadFile = File(...)):
                 success=True,
                 data={
                     "transcript": full_text,
+                    "segments": all_segments,
+                    "hotspots": hotspots,
                     "language": combined_language,
                 },
                 meta={
-                    "processingTime": processing_time,
+                    "processingTime": round((time.time() - start_time) * 1000, 2),
                     "audioDuration": round(total_duration, 2),
-                    "languageConfidence": 0.99, # Aggregated
+                    "languageConfidence": 0.99,
                     "fileSizeMB": round(file_size_mb, 2),
                     "model": getattr(whisper_model, "model_size", "unknown"),
                     "device": getattr(whisper_model, "device", "unknown"),
@@ -135,7 +152,37 @@ async def transcribe_audio(audio: UploadFile = File(...)):
     except HTTPException:
         raise
     except Exception as e:
-        print(f"[Transcribe] Error: {str(e)}")
+        print(f"Transcription error: {str(e)}")
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
+        return TranscriptionResponse(success=False, error=str(e))
+
+
+@router.post("/summarize", response_model=SummarizeResponse)
+async def summarize_transcript(req: SummarizeRequest):
+    """
+    Summarize a transcript using Ollama
+    """
+    start_time = time.time()
+    try:
+        from utils.llm_utils import generate_summary
+        
+        summary = generate_summary(req.text, model=req.model)
+        
+        processing_time = int((time.time() - start_time) * 1000)
+        
+        if summary.startswith("Error:"):
+            return SummarizeResponse(
+                success=False,
+                summary="",
+                error=summary
+            )
+            
+        return SummarizeResponse(
+            success=True,
+            summary=summary,
+            meta={"processingTime": processing_time, "model": req.model}
+        )
+    except Exception as e:
+        print(f"[Summarize] Error: {str(e)}")
+        return SummarizeResponse(success=False, summary="", error=str(e))
