@@ -6,6 +6,8 @@ import {
 import { addContactUpsertJob, type ContactSyncJobPayload } from "@/lib/queue/contacts-sync";
 import { addTranscribeJob } from "@/lib/queue/transcribe";
 import { prisma } from "@/lib/prisma";
+import { findContactByPhoneLast10 } from "@/lib/contact-lookup";
+import { normalizePhone } from "@/modules/capture/utils";
 
 type PrismaWithContactAndInteraction = typeof prisma & {
     contact: {
@@ -85,8 +87,10 @@ export async function POST(req: Request) {
     let upserted = 0;
     try {
         for (const p of payloads) {
+            const existingByLast10 = await findContactByPhoneLast10(p.phone);
+            const phoneForUpsert = existingByLast10?.phone ?? normalizePhone(p.phone);
             await (prisma as PrismaWithContactAndInteraction).contact.upsert({
-                where: { phone: p.phone },
+                where: { phone: phoneForUpsert },
                 update: {
                     name: p.name ?? undefined,
                     email: p.email ?? undefined,
@@ -100,7 +104,7 @@ export async function POST(req: Request) {
                 },
                 create: {
                     name: p.name ?? "Unknown",
-                    phone: p.phone,
+                    phone: phoneForUpsert,
                     email: p.email ?? null,
                     company: p.company ?? null,
                     intentTags: p.intent_tags ?? undefined,
