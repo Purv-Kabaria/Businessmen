@@ -5,7 +5,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { AnimatePresence, motion } from "framer-motion";
-import { Loader2, CheckCircle2, UserRound, Phone, Mail, Mic, MicOff, Square, Play, Trash2 } from "lucide-react";
+import Link from "next/link";
+import { Loader2, CheckCircle2, UserRound, Phone, Mail, Mic, MicOff, Square, Play, Trash2, ArrowLeft } from "lucide-react";
 
 import { useMediaRecorder } from "@/hooks/use-media-recorder";
 import { db } from "@/lib/db";
@@ -248,18 +249,16 @@ export default function FieldPage() {
 
   return (
     <main className="flex min-h-screen flex-col bg-linear-to-b from-secondary/30 to-background">
-      <header className="sticky top-0 z-10 shrink-0 border-b border-border/60 bg-background/95 px-4 py-3 backdrop-blur">
-        <motion.h1
-          initial={{ opacity: 0, y: -4 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.2 }}
-          className="text-lg font-semibold tracking-tight"
-        >
-          Field capture
-        </motion.h1>
-        <p className="mt-0.5 text-xs text-muted-foreground">
-          Quick capture. Save when ready.
-        </p>
+      <header className="sticky top-0 z-10 shrink-0 border-b border-border bg-background px-4 py-3">
+        <div className="flex items-center gap-3">
+          <Link
+            href="/"
+            className="inline-flex h-9 items-center gap-2 rounded-md border-2 border-primary/30 bg-background px-3 py-2 text-sm font-medium text-foreground shadow-sm hover:bg-primary/10 hover:border-primary/50"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Go to home
+          </Link>
+        </div> 
       </header>
 
       <AnimatePresence mode="wait">
