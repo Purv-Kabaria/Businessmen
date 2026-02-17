@@ -679,30 +679,12 @@ export default function AudioReviewPage() {
 
                                                 <div className="flex items-center gap-2">
                                                     <Button
-                                                        variant={isCurrent && isPlaying ? "secondary" : "default"}
-                                                        size="sm"
-                                                        onClick={() => playTrack(interaction)}
-                                                        className="h-8 rounded-full px-4 font-black shadow-md text-[10px] transition-all"
-                                                    >
-                                                        {isCurrent && isPlaying ? (
-                                                            <><Pause className="h-3 w-3 mr-1.5" /> Pause</>
-                                                        ) : (
-                                                            <><Play className="h-3 w-3 mr-1.5" /> Listen</>
-                                                        )}
-                                                    </Button>
-
-                                                    <Button
                                                         variant="outline"
                                                         size="sm"
                                                         className="h-8 rounded-full shadow-sm text-[10px] font-bold transition-all hover:bg-primary/5"
                                                         onClick={() => handleTranscribe(interaction)}
                                                         disabled={transcribingId === interaction.id}
                                                     >
-                                                        {transcribingId === interaction.id ? (
-                                                            <Loader2 className="h-3 w-3 animate-spin mr-1.5" />
-                                                        ) : (
-                                                            <Wand2 className="h-3 w-3 mr-1.5 text-primary" />
-                                                        )}
                                                         {transcribingId === interaction.id ? (
                                                             <Loader2 className="h-3 w-3 animate-spin mr-1.5" />
                                                         ) : (
