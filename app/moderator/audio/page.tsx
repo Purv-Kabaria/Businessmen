@@ -24,6 +24,13 @@ import {
     DialogTitle,
     DialogDescription,
 } from "@/components/ui/dialog";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
 
 interface Contact {
     id: string;
@@ -84,6 +91,7 @@ export default function AudioReviewPage() {
     const [transcribingId, setTranscribingId] = useState<string | null>(null);
     const [activeInteractionId, setActiveInteractionId] = useState<string | null>(null);
     const [isTranscriptOpen, setIsTranscriptOpen] = useState(false);
+    const [selectedAudioIndices, setSelectedAudioIndices] = useState<Record<string, number>>({});
     const audioRef = useRef<HTMLAudioElement>(null);
 
     const [suggestedUpdate, setSuggestedUpdate] = useState<{
@@ -265,7 +273,8 @@ export default function AudioReviewPage() {
         }
     }
 
-    function handlePlayPause(interaction: AudioInteraction, index: number) {
+    function handlePlayPause(interaction: AudioInteraction) {
+        const index = selectedAudioIndices[interaction.id] || 0;
         const url = interaction.audioUrls[index];
         if (!url) {
             toast.error("Audio URL not available");
@@ -306,7 +315,8 @@ export default function AudioReviewPage() {
     }
 
     function playTrack(interaction: AudioInteraction) {
-        const url = interaction.audioUrls?.[0] ?? null;
+        const index = selectedAudioIndices[interaction.id] || 0;
+        const url = interaction.audioUrls?.[index] ?? null;
         if (!url) {
             toast.error("No audio available");
             return;
@@ -315,38 +325,69 @@ export default function AudioReviewPage() {
             id: interaction.id,
             url,
             title: interaction.contact.name || "Unnamed Contact",
-            subtitle: format(new Date(interaction.createdAt), "MMM dd, yyyy"),
+            subtitle: `${format(new Date(interaction.createdAt), "MMM dd, yyyy")} • Part ${index + 1}`,
             duration: undefined,
         });
     }
 
     async function handleTranscribe(interaction: AudioInteraction) {
-        const url = interaction.audioUrls?.[0];
-        if (!url) {
+        const urls = interaction.audioUrls;
+        if (!urls || urls.length === 0) {
             toast.error("No audio to transcribe");
             return;
         }
+
         setTranscribingId(interaction.id);
-        const toastId = toast.loading("Transcribing...");
+        const toastId = toast.loading(`Transcribing ${urls.length} audio file(s)...`);
+
         try {
-            const response = await fetch(`${TRANSCRIBE_API_URL}/api/transcribe`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ audio_url: url }),
-            });
-            const result = await response.json();
-            if (!response.ok || !result.success) throw new Error(result.text ? null : (result.error || "Transcription failed"));
-            const text = result.text || "";
+            const transcriptParts: string[] = [];
+
+            // Process all audios sequentially
+            for (let i = 0; i < urls.length; i++) {
+                const url = urls[i];
+                if (!url) continue;
+
+                // Update toast to show progress if multiple
+                if (urls.length > 1) {
+                    toast.loading(`Transcribing part ${i + 1} of ${urls.length}...`, { id: toastId });
+                }
+
+                const response = await fetch(`${TRANSCRIBE_API_URL}/api/transcribe`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ audio_url: url }),
+                });
+
+                const result = await response.json();
+                if (!response.ok || !result.success) {
+                    console.error(`Failed to transcribe part ${i + 1}`, result);
+                    transcriptParts.push(`[Audio Part ${i + 1}: Transcription Failed]`);
+                    continue;
+                }
+
+                const text = result.text || "";
+                if (urls.length > 1) {
+                    transcriptParts.push(`[Audio Part ${i + 1}]\n${text}`);
+                } else {
+                    transcriptParts.push(text);
+                }
+            }
+
+            const fullTranscript = transcriptParts.join("\n\n");
+
             setGeneratedTranscripts((prev) => {
                 const next = new Map(prev);
-                next.set(interaction.id, text);
+                next.set(interaction.id, fullTranscript);
                 return next;
             });
+
             await fetch("/api/interactions/audio", {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ interactionId: interaction.id, transcript: text }),
+                body: JSON.stringify({ interactionId: interaction.id, transcript: fullTranscript }),
             });
+
             toast.success("Transcription complete", { id: toastId });
         } catch (e: any) {
             toast.error(e.message || "Transcription failed", { id: toastId });
@@ -556,31 +597,57 @@ export default function AudioReviewPage() {
                                                     </span>
                                                 </CardDescription>
                                             </div>
-                                            <div className="flex flex-col items-end gap-1">
-                                                <div className="flex flex-wrap gap-1 justify-end">
-                                                    {interaction.audioUrls.map((url, idx) => {
+                                            <div className="flex flex-col items-end gap-2">
+                                                <div className="flex items-center gap-2">
+                                                    {interaction.audioUrls.length > 1 ? (
+                                                        <Select
+                                                            value={(selectedAudioIndices[interaction.id] || 0).toString()}
+                                                            onValueChange={(val) => setSelectedAudioIndices(prev => ({ ...prev, [interaction.id]: parseInt(val) }))}
+                                                        >
+                                                            <SelectTrigger className="h-8 w-[140px] text-xs font-bold bg-background border-primary/20">
+                                                                <SelectValue />
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                {interaction.audioUrls.map((_, idx) => (
+                                                                    <SelectItem key={idx} value={idx.toString()} className="text-xs font-medium">
+                                                                        Audio Part {idx + 1}
+                                                                    </SelectItem>
+                                                                ))}
+                                                            </SelectContent>
+                                                        </Select>
+                                                    ) : (
+                                                        <Badge variant="outline" className="h-8 px-3 text-[10px] font-black uppercase tracking-wider bg-background">
+                                                            Single Audio
+                                                        </Badge>
+                                                    )}
+
+                                                    {(() => {
+                                                        const idx = selectedAudioIndices[interaction.id] || 0;
                                                         const key = `${interaction.id}-${idx}`;
                                                         const isPlaying = playingKey === key;
+                                                        const url = interaction.audioUrls[idx];
+
                                                         return (
                                                             <Button
                                                                 key={key}
-                                                                onClick={() => handlePlayPause(interaction, idx)}
+                                                                onClick={() => handlePlayPause(interaction)}
                                                                 variant={isPlaying ? "default" : "outline"}
                                                                 size="sm"
                                                                 disabled={!url}
-                                                                title={url ? `Play recording ${idx + 1}` : "Unavailable"}
+                                                                className="h-8 px-4 text-xs font-bold rounded-lg transition-all"
                                                             >
                                                                 {isPlaying ? (
-                                                                    <><Pause className="h-4 w-4 mr-1" /> Pause</>
+                                                                    <><Pause className="h-3.5 w-3.5 mr-1.5" /> Pause</>
                                                                 ) : (
-                                                                    <><Play className="h-4 w-4 mr-1" /> {idx + 1}</>
+                                                                    <><Play className="h-3.5 w-3.5 mr-1.5" /> Play</>
                                                                 )}
                                                             </Button>
                                                         );
-                                                    })}
+                                                    })()}
                                                 </div>
+
                                                 {interaction.audioUrls.length === 0 && (
-                                                    <span className="text-xs text-muted-foreground">No audio</span>
+                                                    <span className="text-xs text-muted-foreground mr-1">No audio files found</span>
                                                 )}
                                             </div>
                                         </div>
@@ -625,7 +692,12 @@ export default function AudioReviewPage() {
                                                         ) : (
                                                             <Wand2 className="h-3 w-3 mr-1.5 text-primary" />
                                                         )}
-                                                        {displayTranscript ? "Retranscribe" : "Transcribe"}
+                                                        {transcribingId === interaction.id ? (
+                                                            <Loader2 className="h-3 w-3 animate-spin mr-1.5" />
+                                                        ) : (
+                                                            <Wand2 className="h-3 w-3 mr-1.5 text-primary" />
+                                                        )}
+                                                        {displayTranscript ? "Retranscribe All" : "Transcribe All"}
                                                     </Button>
                                                 </div>
                                             </div>
