@@ -10,17 +10,6 @@ import {
     validateEnvVar,
 } from "@/lib/api-utils";
 
-type ContactWhere = {
-    OR?: { phone?: { contains: string; mode: "insensitive" }; name?: { contains: string; mode: "insensitive" }; email?: { contains: string; mode: "insensitive" }; company?: { contains: string; mode: "insensitive" } }[];
-};
-type PrismaWithContact = typeof prisma & {
-    contact: {
-        findMany: (args: { where?: ContactWhere; orderBy: { updatedAt: "desc" }; skip: number; take: number; include: { _count: { select: { interactions: true } } } }) => Promise<AdminContactRow[]>;
-        count: (args: { where?: ContactWhere }) => Promise<number>;
-    };
-};
-type AdminContactRow = { _count: { interactions: number }; [key: string]: unknown };
-
 const DEFAULT_PAGE = 1;
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
@@ -69,16 +58,15 @@ export async function GET(req: NextRequest) {
               }
             : undefined;
 
-        const client = prisma as PrismaWithContact;
         const [contacts, total] = await Promise.all([
-            client.contact.findMany({
+            prisma.contact.findMany({
                 where,
                 orderBy: { updatedAt: "desc" },
                 skip: (page - 1) * limit,
                 take: limit,
                 include: { _count: { select: { interactions: true } } },
             }),
-            client.contact.count({ where }),
+            prisma.contact.count({ where }),
         ]);
 
         const totalPages = Math.max(1, Math.ceil(total / limit));

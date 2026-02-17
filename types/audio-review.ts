@@ -5,7 +5,7 @@ export interface Contact {
     email: string | null;
     company: string | null;
     currentStage: string;
-    intentTags: unknown;
+    intentTags: any;
 }
 
 export interface CreatedBy {
@@ -20,10 +20,8 @@ export interface AudioInteraction {
     audioObjectKeys: string[];
     transcript: string | null;
     structuredSnapshot: {
-        /** Timestamp-based segments for sentence-level seek and highlighting. */
-        segments?: Array<{ text: string; start: number; end: number }>;
         summary?: string;
-        hotspots?: Array<{ start?: number; end?: number; label?: string; topic?: string; text?: string; [k: string]: unknown }>;
+        hotspots?: any[];
         sentiment?: {
             sentiment: string;
             score: number;
@@ -35,9 +33,9 @@ export interface AudioInteraction {
             primary_emotion: string;
             score: number;
         };
-        [key: string]: unknown;
+        [key: string]: any;
     };
-    tags: unknown;
+    tags: any;
     createdAt: string;
     contact: Contact;
     createdBy: CreatedBy;

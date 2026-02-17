@@ -11,7 +11,7 @@ export interface OfflineContact {
 
     // New fields from schema update
     company?: string;
-    intentTags?: unknown;
+    intentTags?: any; // JSON
     sourceMode?: string;
     eventId?: string;
     deviceId?: string;
@@ -27,7 +27,7 @@ export interface OfflineInteraction {
     contactId: string;
     audioBlob?: Blob; // Stored locally
     transcript?: string;
-    tags?: Record<string, unknown>;
+    tags?: Record<string, any>;
     createdAt: string;
     createdBy: string; // RM ID
     syncStatus: 'pending' | 'synced' | 'failed';

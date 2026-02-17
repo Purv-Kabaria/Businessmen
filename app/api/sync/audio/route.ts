@@ -68,11 +68,11 @@ export async function POST(req: Request) {
     try {
         let contactId: string | null = null;
         if (contact_server_id) {
-            const c = await prisma.contact.findUnique({ where: { id: contact_server_id }, select: { id: true } });
+            const c = await (prisma as any).contact.findUnique({ where: { id: contact_server_id }, select: { id: true } });
             contactId = c?.id ?? null;
         }
         if (!contactId) {
-            const c = await prisma.contact.findUnique({
+            const c = await (prisma as any).contact.findUnique({
                 where: { offlineLocalId: contact_local_id },
                 select: { id: true },
             });
@@ -86,24 +86,20 @@ export async function POST(req: Request) {
             );
         }
 
-        const interaction = await prisma.interaction.create({
+        const interaction = await (prisma as any).interaction.create({
             data: {
                 contactId,
                 audioObjectKeys: [audio_key],
                 createdBy: session.id,
             },
         });
-        await prisma.aiJob.create({
+        await (prisma as any).aiJob.create({
             data: { interactionId: interaction.id, status: "pending" },
         });
 
         await addTranscribeJob({ interactionId: interaction.id });
 
-        return createSuccessResponse({
-            enqueued: 1,
-            interactionId: interaction.id,
-            transcribeEnqueued: true,
-        });
+        return createSuccessResponse({ enqueued: 1, interactionId: interaction.id });
     } catch (dbError: unknown) {
         if (isPrismaTableMissingError(dbError)) {
             return createErrorResponse(

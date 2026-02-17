@@ -45,8 +45,7 @@ async function processTranscribe(payload: TranscribeJobPayload): Promise<void> {
   });
 
   if (!interaction) {
-    console.warn(`[transcribe] Interaction not found: ${interactionId} (skipping, job will complete without retry)`);
-    return;
+    throw new Error(`Interaction not found: ${interactionId}`);
   }
 
   if (interaction.transcript != null && interaction.transcript.trim().length > 0) {
@@ -63,9 +62,6 @@ async function processTranscribe(payload: TranscribeJobPayload): Promise<void> {
   }
 
   const transcriptParts: string[] = [];
-  const allSegments: Array<{ text: string; start: number; end: number }> = [];
-  const allHotspots: Array<{ start: number; end: number; [k: string]: unknown }> = [];
-  let cumulativeOffsetSec = 0;
   let finalSnapshot: Record<string, unknown> = {};
 
   for (let i = 0; i < keys.length; i++) {
@@ -113,44 +109,9 @@ async function processTranscribe(payload: TranscribeJobPayload): Promise<void> {
     if (data.emotions != null) finalSnapshot.emotions = data.emotions;
     if (data.sentimentFlow != null) finalSnapshot.sentimentFlow = data.sentimentFlow;
     if (data.voiceEmotion != null) finalSnapshot.voiceEmotion = data.voiceEmotion;
-
-    // Timestamp-based segments for sentence-level highlighting and seek
-    const partSegments = Array.isArray(data.segments) ? data.segments : [];
-    let partEndSec = cumulativeOffsetSec;
-    for (const seg of partSegments) {
-      const s = seg as { text?: string; start?: number; end?: number };
-      const start = typeof s.start === "number" ? s.start : 0;
-      const end = typeof s.end === "number" ? s.end : start;
-      const segText = typeof s.text === "string" ? s.text : String(s.text ?? "").trim();
-      if (segText) {
-        allSegments.push({
-          text: segText,
-          start: Math.round((cumulativeOffsetSec + start) * 100) / 100,
-          end: Math.round((cumulativeOffsetSec + end) * 100) / 100,
-        });
-        partEndSec = Math.max(partEndSec, cumulativeOffsetSec + end);
-      }
-    }
-    if (partSegments.length > 0) {
-      const last = partSegments[partSegments.length - 1] as { end?: number };
-      partEndSec = cumulativeOffsetSec + (typeof last?.end === "number" ? last.end : 0);
-    }
-    const partHotspots = Array.isArray(data.hotspots) ? data.hotspots : [];
-    for (const h of partHotspots) {
-      const hp = h as Record<string, unknown> & { start?: number; end?: number };
-      const start = typeof hp.start === "number" ? hp.start : 0;
-      const end = typeof hp.end === "number" ? hp.end : start;
-      allHotspots.push({
-        ...hp,
-        start: Math.round((cumulativeOffsetSec + start) * 100) / 100,
-        end: Math.round((cumulativeOffsetSec + end) * 100) / 100,
-      });
-    }
-    cumulativeOffsetSec = partEndSec;
+    if (data.hotspots != null) finalSnapshot.hotspots = data.hotspots;
   }
 
-  if (allSegments.length > 0) finalSnapshot.segments = allSegments;
-  if (allHotspots.length > 0) finalSnapshot.hotspots = allHotspots;
   const fullTranscript = transcriptParts.join("\n\n");
 
   await prisma.interaction.update({

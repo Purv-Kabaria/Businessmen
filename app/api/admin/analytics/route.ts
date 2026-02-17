@@ -9,14 +9,6 @@ import {
     validateEnvVar,
 } from "@/lib/api-utils";
 
-type PrismaForAnalytics = typeof prisma & {
-    contact: { count: () => Promise<number> };
-    interaction: {
-        count: (args?: { where?: { audioObjectKeys?: { isEmpty: false }; OR?: { dealProfitable?: { not: null }; dealEngaging?: { not: null }; dealWorthy?: { not: null }; dealRemarks?: { not: null } }[] } }) => Promise<number>;
-    };
-    followUp: { count: () => Promise<number> };
-};
-
 export async function GET() {
     try {
         const jwtSecret = validateEnvVar("JWT_SECRET");
@@ -42,7 +34,6 @@ export async function GET() {
             return createErrorResponse("FORBIDDEN", "Admin access required.", 403);
         }
 
-        const client = prisma as PrismaForAnalytics;
         const [
             totalUsers,
             totalModerators,
@@ -56,13 +47,13 @@ export async function GET() {
             prisma.user.count(),
             prisma.user.count({ where: { role: "MODERATOR" } }),
             prisma.user.count({ where: { role: "ADMIN" } }),
-            client.contact.count(),
-            client.interaction.count(),
-            client.followUp.count(),
-            client.interaction.count({
+            prisma.contact.count(),
+            prisma.interaction.count(),
+            prisma.followUp.count(),
+            prisma.interaction.count({
                 where: { audioObjectKeys: { isEmpty: false } },
             }),
-            client.interaction.count({
+            prisma.interaction.count({
                 where: {
                     OR: [
                         { dealProfitable: { not: null } },

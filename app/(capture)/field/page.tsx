@@ -66,7 +66,7 @@ function draftToFormValues(d: DraftData): StallLeadFormValues {
   };
 }
 
-function formIntentTagsToDraft(tags: (string | undefined)[] | undefined): string[] | undefined {
+function formIntentTagsToDraft(tags: any[] | undefined): string[] | undefined {
   const list = (tags ?? []).filter((t): t is string => typeof t === "string" && t.trim() !== "");
   return list.length ? list : undefined;
 }
@@ -344,9 +344,9 @@ export default function FieldPage() {
         return;
       }
       await saveContactToIndexedDBField(values);
-    } catch (e: unknown) {
+    } catch (e: any) {
       console.error(e);
-      toast.error(e instanceof Error ? e.message : "Could not save. Please try again.");
+      toast.error(e.message || "Could not save. Please try again.");
     } finally {
       setIsSubmitting(false);
       submitLockRef.current = false;
@@ -361,8 +361,8 @@ export default function FieldPage() {
     try {
       await saveContactToIndexedDBField(duplicateConfirmPending);
       setDuplicateConfirmPending(null);
-    } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "Could not save. Please try again.");
+    } catch (e: any) {
+      toast.error(e.message || "Could not save. Please try again.");
     } finally {
       setIsSubmitting(false);
       submitLockRef.current = false;
@@ -564,10 +564,10 @@ export default function FieldPage() {
                                   ))}
                                 </CommandGroup>
 
-                                {field.value && field.value.some(tag => !STALL_INTENTS.includes(tag as StallIntent)) && (
+                                {field.value && field.value.some(tag => !STALL_INTENTS.includes(tag as any)) && (
                                   <CommandGroup heading="Custom Interests">
                                     {field.value
-                                      .filter(tag => !STALL_INTENTS.includes(tag as StallIntent))
+                                      .filter(tag => !STALL_INTENTS.includes(tag as any))
                                       .map((tag) => (
                                         <CommandItem
                                           key={tag}

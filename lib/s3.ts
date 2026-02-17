@@ -28,15 +28,14 @@ export async function ensureBucketExists(bucketName: string) {
     try {
         await s3Client.send(new HeadBucketCommand({ Bucket: bucketName }));
         console.log(`[S3 Client] Bucket "${bucketName}" exists`);
-    } catch (error: unknown) {
-        const err = error as { name?: string; $metadata?: { httpStatusCode?: number } };
-        if (err.name === "NotFound" || err.$metadata?.httpStatusCode === 404) {
+    } catch (error: any) {
+        if (error.name === "NotFound" || error.$metadata?.httpStatusCode === 404) {
             console.log(`[S3 Client] Creating bucket "${bucketName}"...`);
             await s3Client.send(new CreateBucketCommand({ Bucket: bucketName }));
             console.log(`[S3 Client] Bucket "${bucketName}" created`);
         } else {
             console.error(`[S3] Failed to head bucket ${bucketName}:`, error);
-            throw err;
+            throw error;
         }
     }
 }

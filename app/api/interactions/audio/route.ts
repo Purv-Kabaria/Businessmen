@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { jwtVerify } from "jose";
-import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import s3Client from "@/lib/s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
@@ -42,9 +41,10 @@ export async function GET(req: NextRequest) {
 
         const secret = new TextEncoder().encode(jwtSecret);
         const { payload } = await jwtVerify(token, secret);
-        const userRole = (payload as { role?: string }).role;
+        const userRole = (payload as any).role;
 
-        if (!userRole || !["MODERATOR", "ADMIN"].includes(userRole)) {
+        // Only MODERATOR and ADMIN can access
+        if (!["MODERATOR", "ADMIN"].includes(userRole)) {
             return NextResponse.json(
                 { success: false, error: { message: "Forbidden" } },
                 { status: 403 }
@@ -79,7 +79,7 @@ export async function GET(req: NextRequest) {
 
         const [interactionsRows, total] = await Promise.all([
             prisma.interaction.findMany({
-                where: whereClause,
+                where: whereClause as any,
                 include: {
                     contact: {
                         select: {
@@ -107,7 +107,7 @@ export async function GET(req: NextRequest) {
                 take: limit,
             }),
             prisma.interaction.count({
-                where: whereClause,
+                where: whereClause as any,
             }),
         ]);
 
@@ -157,13 +157,13 @@ export async function GET(req: NextRequest) {
                 },
             },
         });
-    } catch (error: unknown) {
+    } catch (error: any) {
         console.error("[API /api/interactions/audio] Error:", error);
         return NextResponse.json(
             {
                 success: false,
                 error: {
-                    message: error instanceof Error ? error.message : "Failed to fetch audio interactions",
+                    message: error.message || "Failed to fetch audio interactions",
                 },
             },
             { status: 500 }
@@ -192,9 +192,9 @@ export async function PATCH(req: NextRequest) {
 
         const secret = new TextEncoder().encode(jwtSecret);
         const { payload } = await jwtVerify(token, secret);
-        const userRole = (payload as { role?: string }).role;
+        const userRole = (payload as any).role;
 
-        if (!userRole || !["MODERATOR", "ADMIN"].includes(userRole)) {
+        if (!["MODERATOR", "ADMIN"].includes(userRole)) {
             return NextResponse.json(
                 { success: false, error: { message: "Forbidden" } },
                 { status: 403 }
@@ -212,9 +212,10 @@ export async function PATCH(req: NextRequest) {
             );
         }
 
-        const updateData: { transcript?: string; structuredSnapshot?: Prisma.InputJsonValue } = {};
+        // 3. Update interaction in database
+        const updateData: any = {};
         if (transcript !== undefined) updateData.transcript = transcript;
-        if (structuredSnapshot !== undefined) updateData.structuredSnapshot = structuredSnapshot as Prisma.InputJsonValue;
+        if (structuredSnapshot !== undefined) updateData.structuredSnapshot = structuredSnapshot;
 
         const updatedInteraction = await prisma.interaction.update({
             where: { id: interactionId },
@@ -252,13 +253,13 @@ export async function PATCH(req: NextRequest) {
             data: updatedInteraction
         });
 
-    } catch (error: unknown) {
+    } catch (error: any) {
         console.error("[API /api/interactions/audio] PATCH Error:", error);
         return NextResponse.json(
             {
                 success: false,
                 error: {
-                    message: error instanceof Error ? error.message : "Failed to update transcription",
+                    message: error.message || "Failed to update transcription",
                 },
             },
             { status: 500 }

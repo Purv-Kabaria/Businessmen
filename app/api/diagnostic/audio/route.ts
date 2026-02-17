@@ -55,12 +55,12 @@ export async function GET(req: NextRequest) {
                 },
             },
         });
-    } catch (error: unknown) {
+    } catch (error: any) {
         console.error("[Diagnostic] Error:", error);
         return NextResponse.json(
             {
                 success: false,
-                error: error instanceof Error ? error.message : "Diagnostic failed",
+                error: error.message,
             },
             { status: 500 }
         );

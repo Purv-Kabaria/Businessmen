@@ -9,7 +9,6 @@ const API_BASE = "/api";
 
 export type CaptureSyncContactsResult = {
     enqueued: number;
-    transcribeEnqueued?: number;
     error?: string;
 };
 
@@ -51,7 +50,6 @@ export async function syncContactsFromQueue(): Promise<CaptureSyncContactsResult
 
     const data = await res.json();
     const enqueued = data?.data?.enqueued ?? 0;
-    const transcribeEnqueued = data?.data?.transcribeEnqueued ?? 0;
 
     if (enqueued > 0) {
         for (let i = 0; i < Math.min(enqueued, contacts.length); i++) {
@@ -60,7 +58,7 @@ export async function syncContactsFromQueue(): Promise<CaptureSyncContactsResult
         }
     }
 
-    return { enqueued, transcribeEnqueued };
+    return { enqueued };
 }
 
 export async function syncAudioFromQueue(): Promise<CaptureSyncAudioResult> {

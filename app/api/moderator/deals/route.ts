@@ -3,24 +3,6 @@ import { jwtVerify } from "jose";
 import { prisma } from "@/lib/prisma";
 import { createErrorResponse, createSuccessResponse } from "@/lib/api-utils";
 
-type PrismaWithInteraction = typeof prisma & {
-    interaction: {
-        findMany: (args: { where: { audioObjectKeys: { isEmpty: false } }; include: { contact: { select: { id: true; name: true; phone: true; email: true; company: true } }; createdByUser: { select: { id: true; fullName: true; email: true } } }; orderBy: { createdAt: "desc" }; skip: number; take: number }) => Promise<DealRow[]>;
-        count: (args: { where: { audioObjectKeys: { isEmpty: false } } }) => Promise<number>;
-        update: (args: { where: { id: string }; data: { dealProfitable?: boolean | null; dealEngaging?: boolean | null; dealWorthy?: boolean | null; dealRemarks?: string | null }; select: { id: true; dealProfitable: true; dealEngaging: true; dealWorthy: true; dealRemarks: true } }) => Promise<{ id: string; dealProfitable: boolean | null; dealEngaging: boolean | null; dealWorthy: boolean | null; dealRemarks: string | null }>;
-    };
-};
-type DealRow = {
-    id: string;
-    createdAt: Date;
-    dealProfitable: boolean | null;
-    dealEngaging: boolean | null;
-    dealWorthy: boolean | null;
-    dealRemarks: string | null;
-    contact: { id: string; name: string | null; phone: string; email: string | null; company: string | null };
-    createdByUser: { id: string; fullName: string | null; email: string };
-};
-
 async function requireModerator(req: NextRequest) {
     const token = req.cookies.get("token")?.value;
     if (!token) return { ok: false as const, status: 401, message: "Unauthorized" };
@@ -43,9 +25,8 @@ export async function GET(req: NextRequest) {
         const limit = Math.min(50, Math.max(1, parseInt(searchParams.get("limit") || "20")));
         const skip = (page - 1) * limit;
 
-        const client = prisma as PrismaWithInteraction;
         const [rows, total] = await Promise.all([
-            client.interaction.findMany({
+            prisma.interaction.findMany({
                 where: { audioObjectKeys: { isEmpty: false } },
                 include: {
                     contact: { select: { id: true, name: true, phone: true, email: true, company: true } },
@@ -55,7 +36,7 @@ export async function GET(req: NextRequest) {
                 skip,
                 take: limit,
             }),
-            client.interaction.count({ where: { audioObjectKeys: { isEmpty: false } } }),
+            prisma.interaction.count({ where: { audioObjectKeys: { isEmpty: false } } }),
         ]);
 
         const interactions = rows.map((r) => ({
@@ -100,8 +81,7 @@ export async function PATCH(req: NextRequest) {
             return createErrorResponse("VALIDATION_ERROR", "At least one deal field is required", 400);
         }
 
-        const client = prisma as PrismaWithInteraction;
-        const interaction = await client.interaction.update({
+        const interaction = await prisma.interaction.update({
             where: { id: interactionId },
             data: update,
             select: { id: true, dealProfitable: true, dealEngaging: true, dealWorthy: true, dealRemarks: true },

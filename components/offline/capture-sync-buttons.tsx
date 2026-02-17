@@ -42,11 +42,7 @@ export function CaptureSyncButtons() {
             if (result.error) {
                 toast.error(result.error);
             } else {
-                let msg = `Enqueued ${result.enqueued} contact(s) for sync.`;
-                if (result.transcribeEnqueued != null && result.transcribeEnqueued > 0) {
-                    msg += ` Transcription queued for ${result.transcribeEnqueued} recording(s) (AI worker).`;
-                }
-                toast.success(msg);
+                toast.success(`Enqueued ${result.enqueued} contact(s) for sync.`);
             }
             await refreshCounts();
         } catch (e) {
@@ -64,11 +60,7 @@ export function CaptureSyncButtons() {
             if (result.errors.length > 0) {
                 toast.error(result.errors[0]);
             } else {
-                let msg = `Uploaded ${result.enqueued} audio recording(s).`;
-                if (result.enqueued > 0) {
-                    msg += " Transcription queued for AI worker.";
-                }
-                toast.success(msg);
+                toast.success(`Uploaded ${result.enqueued} audio recording(s) to S3 (WebP).`);
             }
             await refreshCounts();
         } catch (e) {

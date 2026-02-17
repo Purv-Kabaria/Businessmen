@@ -47,9 +47,9 @@ export function SyncIndicator() {
             } else {
                 toast.success(`Successfully synced ${stats.contactsSuccess + stats.interactionsSuccess} items!`);
             }
-        } catch (error: unknown) {
+        } catch (error: any) {
             console.error("Sync failed:", error);
-            setLastError(error instanceof Error ? error.message : "Sync failed");
+            setLastError(error.message);
             toast.error("Sync failed completely. Please try again later.");
         } finally {
             setIsSyncing(false);

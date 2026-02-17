@@ -123,7 +123,7 @@ function AdminUsersPageContent() {
     [sortBy, sortOrder]
   );
   const filters: AdminUserFilters = useMemo(
-    () => (roleFilter && ["USER", "MODERATOR", "ADMIN"].includes(roleFilter) ? { role: roleFilter as (typeof UserRole.options)[number] } : {}),
+    () => (roleFilter ? { role: roleFilter as any } : {}),
     [roleFilter]
   );
 

@@ -2,18 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { jwtVerify } from "jose";
 import { prisma } from "@/lib/prisma";
 
-type ExportItem = {
-    contact: { name: string | null; phone: string; email: string | null; company: string | null; intentTags: unknown; currentStage: string; sourceMode: string | null };
-    transcript: string | null;
-    structuredSnapshot: unknown;
-    createdAt: Date;
-    createdByUser: { fullName: string | null };
-};
-
-type PrismaWithInteraction = typeof prisma & {
-    interaction: { findMany: (args: { include: { contact: true; createdByUser: true }; orderBy: { createdAt: "desc" } }) => Promise<ExportItem[]> };
-};
-
 export async function GET(req: NextRequest) {
     try {
         // 1. Verify authentication and role
@@ -29,14 +17,15 @@ export async function GET(req: NextRequest) {
 
         const secret = new TextEncoder().encode(jwtSecret);
         const { payload } = await jwtVerify(token, secret);
-        const userRole = (payload as { role?: string }).role;
+        const userRole = (payload as any).role;
 
-        if (!userRole || !["MODERATOR", "ADMIN"].includes(userRole)) {
+        // Only MODERATOR and ADMIN can access
+        if (!["MODERATOR", "ADMIN"].includes(userRole)) {
             return new NextResponse("Forbidden", { status: 403 });
         }
 
-        const client = prisma as PrismaWithInteraction;
-        const interactions = await client.interaction.findMany({
+        // 2. Fetch all lead data with interactions
+        const interactions = await prisma.interaction.findMany({
             include: {
                 contact: true,
                 createdByUser: true,
@@ -47,7 +36,7 @@ export async function GET(req: NextRequest) {
         });
 
         // 3. Helper for CSV escaping
-        const escapeCSV = (val: unknown): string => {
+        const escapeCSV = (val: any): string => {
             if (val === null || val === undefined) return "";
             let s = typeof val === 'object' ? JSON.stringify(val) : String(val);
             if (s.includes('"') || s.includes(',') || s.includes('\n') || s.includes('\r')) {
@@ -71,9 +60,10 @@ export async function GET(req: NextRequest) {
             "Source Mode"
         ];
 
-        const rows = interactions.map((item: ExportItem) => {
+        // 5. Generate CSV rows
+        const rows = interactions.map(item => {
             const contact = item.contact;
-            const summary = (item.structuredSnapshot as { summary?: string } | null)?.summary ?? "";
+            const summary = (item.structuredSnapshot as any)?.summary || "";
 
             // Format intent tags
             let tagsStr = "";
@@ -110,7 +100,7 @@ export async function GET(req: NextRequest) {
             },
         });
 
-    } catch (error: unknown) {
+    } catch (error: any) {
         console.error("[CSV Export] Error:", error);
         return new NextResponse("Failed to export CSV", { status: 500 });
     }
