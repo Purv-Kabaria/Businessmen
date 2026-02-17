@@ -8,7 +8,10 @@
     "start": "next start",
     "lint": "eslint",
     "prisma:generate": "dotenv -- prisma generate",
+    "prisma:generate:local": "dotenv -e .env.local.dev -- prisma generate",
     "prisma:migrate": "dotenv -- prisma migrate dev",
+    "prisma:migrate:local": "dotenv -e .env.local.dev -- prisma migrate dev",
+    "prisma:studio:local": "dotenv -e .env.local.dev -- prisma studio",
     "export-table": "dotenv -- tsx scripts/export-table.ts",
     "import-table": "dotenv -- tsx scripts/import-table.ts",
     "dev:shared": "dotenv -e .env.shared.dev -- next dev --turbo -p 3000",
@@ -16,8 +19,6 @@
     "dev:both": "concurrently \"pnpm dev:shared\" \"pnpm dev:local\""
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.500.0",
-    "@aws-sdk/s3-request-presigner": "^3.500.0",
     "@hookform/resolvers": "^5.2.2",
     "@prisma/client": "^6.19.0",
     "@radix-ui/react-accordion": "^1.2.12",
@@ -52,8 +53,6 @@
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
     "date-fns": "^4.1.0",
-    "dexie": "^4.3.0",
-    "dexie-react-hooks": "^4.2.0",
     "embla-carousel-react": "^8.6.0",
     "framer-motion": "^12.23.24",
     "input-otp": "^1.4.2",
