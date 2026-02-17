@@ -65,7 +65,7 @@ model Interaction {
   id                 String   @id @default(uuid())
   contactId          String   @map("contact_id")
   contact            Contact  @relation(fields: [contactId], references: [id])
-  audioObjectKey     String?  @map("audio_object_key")
+  audioObjectKeys    String[] @default([]) @map("audio_object_keys")
   transcript         String?
   structuredSnapshot Json?    @map("structured_snapshot")
   tags               Json?

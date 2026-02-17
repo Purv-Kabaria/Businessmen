@@ -1,89 +1,108 @@
-# 🚀 FinBridge Backend - OCR & Audio Transcription
+# FastAPI OCR Backend for FinBridge
 
-High-performance FastAPI backend for business card OCR and audio transcription with offline support.
+This is a Python FastAPI backend that handles OCR (Optical Character Recognition) for business card scanning.
 
-## ✨ Features
+## Features
 
-### 1. **Smart OCR Processing**
-- 🎯 **Primary**: Ollama gemma3 vision model (best accuracy)
-- 🔄 **Fallback**: Multi-config Tesseract OCR
-- 📧 Email extraction & scoring
-- 📱 Phone normalization (10-digit format)
-- 🏢 Company name detection
-- ✅ Confidence scoring & validation
+- **Fast OCR Processing** using Tesseract
+- **Image Preprocessing** for better accuracy
+- **Regex Pattern Matching** for contact extraction
+- **Data Validation** with confidence scoring
+- **CORS Support** for Next.js frontend integration
 
-### 2. **Audio Transcription** ⭐ NEW
-- 🎤 **Offline Whisper** - Works without internet
-- ⚡ **Optimized for Speed** - faster-whisper (2-4x faster)
-- 🖥️ **GPU Accelerated** - Auto-detects CUDA
-- 🔇 **Voice Activity Detection** - Skips silence
-- 🌍 **99 Languages** - Auto-detects language
-- 📊 **Real-time Processing** - ~0.6x RTF on CPU
+## Prerequisites
 
-## 📋 Quick Start
-
-### 1. Setup (First Time)
-
+### 1. Install Python
 ```bash
-# Navigate to backend
-cd d:\Projects\htt_Businessmen\python_backend
+# Windows
+winget install Python.Python.3.12
 
-# Run setup script
-setup.bat
+# Or download from: https://www.python.org/downloads/
 ```
 
-This will:
-- Create Python virtual environment
-- Install all dependencies (FastAPI, Whisper, Tesseract bindings, etc.)
-- Download Whisper model (~150MB)
-
-### 2. Start Server
-
+### 2. Install Tesseract OCR
 ```bash
-# Method 1: Use the convenient script
-start_server.bat
+# Windows
+winget install UB-Mannheim.TesseractOCR
 
-# Method 2: Manual start
+# Or download from: https://github.com/UB-Mannheim/tesseract/wiki
+```
+
+After installation, add Tesseract to PATH or configure pytesseract:
+```python
+# If not in PATH, configure in main.py
+import pytesseract
+pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+```
+
+## Installation
+
+### 1. Create Virtual Environment
+```bash
+cd d:\Projects\htt_Businessmen\python_backend
+
+# Create venv
+python -m venv venv
+
+# Activate venv
+# Windows CMD:
 venv\Scripts\activate
+
+# Windows PowerShell:
+venv\Scripts\Activate.ps1
+
+# Git Bash:
+source venv/Scripts/activate
+```
+
+### 2. Install Dependencies
+```bash
+pip install -r requirements.txt
+```
+
+## Running the Server
+
+### Development Mode (with auto-reload)
+```bash
 uvicorn main:app --reload --port 8000
 ```
 
-Server will start at: **http://localhost:8000**
+### Production Mode
+```bash
+uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4
+```
 
-## 🔌 API Endpoints
+The server will start at: **http://localhost:8000**
 
-### 1️⃣ Health Check
-```http
+## API Endpoints
+
+### 1. Root
+```
+GET /
+```
+Returns service information and available endpoints.
+
+### 2. Health Check
+```
 GET /health
 ```
+Checks if Tesseract is installed and available.
 
 **Response:**
 ```json
 {
   "status": "healthy",
-  "tesseract": {
-    "available": true,
-    "version": "v5.3.0"
-  },
-  "ollama": {
-    "available": true,
-    "model": "gemma3:4b"
-  },
-  "whisper": {
-    "available": true,
-    "model": "faster-whisper-base",
-    "device": "cpu"
-  }
+  "tesseract": "available"
 }
 ```
 
-### 2️⃣ OCR Processing
-```http
-POST /api/ocr
-Content-Type: multipart/form-data
-
-image: <business_card_image>
+### 3. OCR Processing
 ```
+POST /api/ocr
+```
+
+**Request:**
+- `image`: Multipart form file (JPEG, PNG, etc.)
 
 **Response:**
 ```json
@@ -91,297 +110,188 @@ image: <business_card_image>
   "success": true,
   "data": {
     "name": "John Doe",
-    "phone": "9876543210",
+    "phone": "+919876543210",
     "email": "john@company.com",
-    "company": "Tech Corp Pvt Ltd"
+    "company": "Tech Corp"
   },
   "meta": {
-    "confidence": 85,
+    "confidence": 75,
     "warnings": [],
     "processingTime": 234,
-    "engine": "gemma3-vision",
-    "alternatives": {
-      "phones": ["9876543210", "9876543211"],
-      "emails": ["john@company.com"]
-    }
+    "engine": "tesseract"
   }
 }
 ```
 
-### 3️⃣ Audio Transcription ⭐ NEW
-```http
-POST /api/transcribe
-Content-Type: multipart/form-data
+## Testing the API
 
-audio: <audio_file>
-```
-
-**Supported formats:** WAV, WebM, MP3, M4A, OGG, FLAC
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": {
-    "transcript": "Hello, this is a test recording.",
-    "language": "en"
-  },
-  "meta": {
-    "processingTime": 1234,
-    "audioDuration": 5.2,
-    "languageConfidence": 0.9876,
-    "fileSizeMB": 0.15,
-    "model": "faster-whisper-base",
-    "device": "cpu"
-  }
-}
-```
-
-## 🧪 Testing
-
-### Test OCR
+### Using cURL
 ```bash
 curl -X POST http://localhost:8000/api/ocr \
   -F "image=@business_card.jpg"
-```
-
-### Test Transcription
-```bash
-curl -X POST http://localhost:8000/api/transcribe \
-  -F "audio=@recording.webm"
 ```
 
 ### Using Python
 ```python
 import requests
 
-# OCR
-with open('card.jpg', 'rb') as f:
-    r = requests.post('http://localhost:8000/api/ocr', files={'image': f})
-    print(r.json())
-
-# Transcription
-with open('audio.webm', 'rb') as f:
-    r = requests.post('http://localhost:8000/api/transcribe', files={'audio': f})
-    print(r.json()['data']['transcript'])
+with open('business_card.jpg', 'rb') as f:
+    response = requests.post(
+        'http://localhost:8000/api/ocr',
+        files={'image': f}
+    )
+    print(response.json())
 ```
 
-## ⚙️ Configuration
+### Using the Next.js Frontend
+The frontend will automatically use this endpoint once you update the API URL.
 
-### Whisper Model Size
+## Configuration
 
-Edit `main.py` line 72:
-```python
-whisper_model = WhisperModel(
-    "base",  # Change to: tiny, small, medium, large-v3
-    device=device,
-    compute_type=compute_type,
-)
-```
+### Environment Variables (Optional)
 
-**Model Sizes:**
-- `tiny` - ~75MB, fastest (RTF ~0.4x)
-- `base` - ~150MB, **recommended** ⭐ (RTF ~0.6x)
-- `small` - ~500MB, better accuracy (RTF ~1.2x)
-- `medium` - ~1.5GB, very accurate (RTF ~2.5x)
-- `large-v3` - ~3GB, best accuracy (RTF ~5x)
-
-### Speed vs Accuracy
-
-**For Maximum Speed:**
-```python
-segments, info = whisper_model.transcribe(
-    audio_path,
-    beam_size=1,        # ← Fastest
-    best_of=1,          # ← Fastest
-    vad_filter=True,    # ← Skip silence
-    word_timestamps=False,  # ← Faster
-    language="en",      # ← Skip detection
-)
-```
-
-**For Maximum Accuracy:**
-```python
-segments, info = whisper_model.transcribe(
-    audio_path,
-    beam_size=5,        # ← More accurate
-    best_of=5,          # ← More accurate
-    temperature=[0.0, 0.2, 0.4, 0.6, 0.8],  # ← Multiple temps
-    word_timestamps=True,
-)
-```
-
-## 📊 Performance
-
-### OCR Processing
-- **Ollama (gemma3)**: 1-3 seconds
-- **Tesseract**: 200-800ms
-- **Accuracy**: 70-90% (image quality dependent)
-
-### Audio Transcription
-| Duration | CPU (int8) | GPU (fp16) |
-|----------|------------|------------|
-| 10s      | ~800ms     | ~300ms     |
-| 30s      | ~2s        | ~800ms     |
-| 1 min    | ~3.5s      | ~1.5s      |
-| 5 min    | ~15s       | ~6s        |
-
-**Real-time Factor**: 0.6x on CPU (60% of audio duration)
-
-## 🔧 Optimizations Applied
-
-### OCR
-1. ✅ Ollama vision model as primary (better accuracy)
-2. ✅ Multi-config Tesseract fallback
-3. ✅ Image preprocessing (contrast, sharpness, brightness)
-4. ✅ Multiple pattern matching for phone/email
-5. ✅ Intelligent name extraction
-6. ✅ Phone normalization to 10 digits
-7. ✅ Email scoring (professional > personal)
-
-### Audio Transcription
-1. ✅ **Model pre-loading** (no loading delay)
-2. ✅ **faster-whisper** (2-4x faster than OpenAI Whisper)
-3. ✅ **Voice Activity Detection** (skip silence)
-4. ✅ **CPU quantization** (int8 for speed)
-5. ✅ **GPU acceleration** (auto-detects CUDA)
-6. ✅ **Multi-threading** (4 CPU threads)
-7. ✅ **Deterministic output** (temperature=0)
-
-## 🌐 Frontend Integration
-
-### Environment Variables
-
-Add to `.env.shared.dev`:
+Create `.env` file in `python_backend/`:
 ```env
-NEXT_PUBLIC_OCR_API_URL=http://localhost:8000
-NEXT_PUBLIC_TRANSCRIBE_API_URL=http://localhost:8000
+# Server
+HOST=0.0.0.0
+PORT=8000
+
+# CORS
+CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+
+# Tesseract (if not in PATH)
+TESSERACT_CMD=C:\Program Files\Tesseract-OCR\tesseract.exe
 ```
 
-### Usage in Next.js
+### Tesseract Configuration
+
+For better accuracy, you can customize Tesseract settings in `main.py`:
+
+```python
+# Page Segmentation Modes (PSM):
+# 3 = Fully automatic page segmentation (default)
+# 6 = Assume a single uniform block of text
+# 11 = Sparse text. Find as much text as possible
+config = '--psm 6 --oem 3'
+
+raw_text = pytesseract.image_to_string(processed_image, config=config)
+```
+
+## Integration with Next.js
+
+Update your Next.js frontend to use the FastAPI backend:
 
 ```typescript
-// OCR
-async function processBusinessCard(imageFile: File) {
-  const formData = new FormData();
-  formData.append('image', imageFile);
-  
-  const response = await fetch(
-    `${process.env.NEXT_PUBLIC_OCR_API_URL}/api/ocr`,
-    { method: 'POST', body: formData }
-  );
-  
-  const result = await response.json();
-  return result.data; // { name, phone, email, company }
-}
+// In your Next.js component
+const API_URL = process.env.NEXT_PUBLIC_OCR_API_URL || 'http://localhost:8000';
 
-// Transcription
-async function transcribeAudio(audioBlob: Blob) {
+async function processImage(file: File) {
   const formData = new FormData();
-  formData.append('audio', audioBlob, 'recording.webm');
+  formData.append('image', file);
   
-  const response = await fetch(
-    `${process.env.NEXT_PUBLIC_TRANSCRIBE_API_URL}/api/transcribe`,
-    { method: 'POST', body: formData }
-  );
+  const response = await fetch(`${API_URL}/api/ocr`, {
+    method: 'POST',
+    body: formData,
+  });
   
-  const result = await response.json();
-  return result.data.transcript;
+  return await response.json();
 }
 ```
 
-## 🐛 Troubleshooting
-
-### Tesseract Not Found
-```
-pytesseract.pytesseract.TesseractNotFoundError
-```
-**Solution:**
-```bash
-winget install UB-Mannheim.TesseractOCR
-```
-Then add to PATH or configure in `main.py`:
-```python
-pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+Add to `.env.local`:
+```env
+NEXT_PUBLIC_OCR_API_URL=http://localhost:8000
 ```
 
-### Whisper Model Not Loading
-```
-[Whisper] Warning: Failed to load model
-```
-**Solution:**
-```bash
-pip install --upgrade faster-whisper torch
-```
+## Deployment
 
-### Slow Transcription
-**Solution 1:** Use smaller model
-```python
-WhisperModel("tiny")  # Instead of "base"
-```
-
-**Solution 2:** GPU acceleration
-```bash
-pip install torch --index-url https://download.pytorch.org/whl/cu118
-```
-
-### CORS Errors
-Update `allow_origins` in `main.py`:
-```python
-allow_origins=["http://localhost:3000", "http://localhost:3001"]
-```
-
-## 📚 Documentation
-
-- [OCR Documentation](./OCR_ENHANCEMENTS.md)
-- [Whisper Transcription Guide](./WHISPER_TRANSCRIPTION.md)
-
-## 🚀 Production Deployment
-
-### Docker
+### Option 1: Docker
 ```dockerfile
 FROM python:3.12-slim
 
-RUN apt-get update && apt-get install -y \
-    tesseract-ocr \
-    ffmpeg \
-    && rm -rf /var/lib/apt/lists/*
+# Install Tesseract
+RUN apt-get update && apt-get install -y tesseract-ocr
 
 WORKDIR /app
+
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Pre-download Whisper model
-RUN python -c "from faster_whisper import WhisperModel; WhisperModel('base')"
-
 COPY main.py .
+
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
 ```
 
-Build & run:
+Build and run:
 ```bash
-docker build -t finbridge-backend .
-docker run -p 8000:8000 finbridge-backend
+docker build -t finbridge-ocr .
+docker run -p 8000:8000 finbridge-ocr
 ```
 
-## 📦 Dependencies
+### Option 2: Railway/Render
+1. Create `Procfile`:
+   ```
+   web: uvicorn main:app --host 0.0.0.0 --port $PORT
+   ```
 
-```txt
-fastapi==0.115.0
-uvicorn==0.30.0
-python-multipart==0.0.12
-pytesseract==0.3.13
-Pillow==11.0.0
-pydantic==2.9.0
-requests==2.32.3
-faster-whisper==1.1.0
-torch==2.2.0
+2. Create `runtime.txt`:
+   ```
+   python-3.12.0
+   ```
+
+3. Deploy via Git push
+
+## Performance
+
+- **Average Processing Time**: 200-500ms per image
+- **Accuracy**: 70-85% depending on image quality
+- **Max Image Size**: 2000x2000px (auto-resized)
+- **Supported Formats**: JPEG, PNG, BMP, TIFF
+
+## Troubleshooting
+
+### Tesseract not found
+```
+pytesseract.pytesseract.TesseractNotFoundError
 ```
 
-## 📄 License
+**Solution:** Add Tesseract to PATH or set `tesseract_cmd`:
+```python
+import pytesseract
+pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+```
 
-Part of the FinBridge HTT 2026 project.
+### CORS Errors
+If frontend can't connect, check CORS origins in `main.py`:
+```python
+allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"]
+```
 
----
+### Low Accuracy
+- Ensure image is high quality and well-lit
+- Try different PSM modes
+- Consider using EasyOCR or PaddleOCR for better accuracy
 
-**Ready for production!** Backend is optimized, works offline, and handles real-world scenarios efficiently. 🎉
+## Upgrading to Better OCR
+
+For production, consider upgrading to:
+
+### EasyOCR (Better Accuracy)
+```bash
+pip install easyocr
+```
+
+```python
+import easyocr
+reader = easyocr.Reader(['en'])
+result = reader.readtext(image)
+```
+
+### Google Cloud Vision API (Best Accuracy)
+```bash
+pip install google-cloud-vision
+```
+
+## License
+
+Part of the FinBridge project.

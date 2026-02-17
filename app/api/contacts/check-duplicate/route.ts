@@ -1,7 +1,21 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createSuccessResponse, createErrorResponse } from "@/lib/api-utils";
-import { normalizePhone, normalizeEmail } from "@/modules/capture/utils";
+
+function normalizePhone(raw: string): string {
+  const digits = raw.replace(/\D/g, "");
+  if (digits.startsWith("91") && digits.length > 10) {
+    return digits.slice(0, 12);
+  }
+  if (digits.length > 10) {
+    return digits.slice(-10);
+  }
+  return digits;
+}
+
+function normalizeEmail(raw: string): string {
+  return raw.trim().toLowerCase();
+}
 
 export async function POST(request: NextRequest) {
   try {
