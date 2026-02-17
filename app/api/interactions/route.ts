@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import s3Client, { ensureBucketExists, PutObjectCommand } from "@/lib/s3";
 import {
@@ -36,28 +37,40 @@ export async function POST(req: Request) {
         const interaction_id = randomUUID();
         let audio_object_key: string | null = null;
 
-        // 2. Upload audio to MinIO if exists
-        if (audio_file) {
-            const bucket_name = process.env.MINIO_BUCKET || "interactions-audio";
-            await ensureBucketExists(bucket_name);
-
-            audio_object_key = `interactions/${interaction_id}.wav`;
-            const audio_buffer = Buffer.from(await audio_file.arrayBuffer());
-
-            await s3Client.send(
-                new PutObjectCommand({
-                    Bucket: bucket_name,
-                    Key: audio_object_key,
-                    Body: audio_buffer,
-                    ContentType: audio_file.type || "audio/wav",
-                })
-            );
+        if (audio_file && typeof audio_file.arrayBuffer === "function") {
+            try {
+                const bucket_name = process.env.MINIO_BUCKET || "interactions-audio";
+                await ensureBucketExists(bucket_name);
+                audio_object_key = `interactions/${interaction_id}.webm`;
+                const audio_buffer = Buffer.from(await audio_file.arrayBuffer());
+                await s3Client.send(
+                    new PutObjectCommand({
+                        Bucket: bucket_name,
+                        Key: audio_object_key,
+                        Body: audio_buffer,
+                        ContentType: audio_file.type || "audio/webm",
+                    })
+                );
+            } catch (s3Error: unknown) {
+                const message = s3Error instanceof Error ? s3Error.message : "Storage unavailable";
+                return createErrorResponse(
+                    "AUDIO_STORAGE_FAILED",
+                    process.env.NODE_ENV === "development" ? message : "Audio storage failed. Check MinIO is running.",
+                    503,
+                    process.env.NODE_ENV === "development" && s3Error instanceof Error ? { details: s3Error.message } : undefined
+                );
+            }
         }
 
-        const tags = tags_json ? JSON.parse(tags_json) : null;
+        let tags: unknown = null;
+        if (tags_json) {
+            try {
+                tags = JSON.parse(tags_json);
+            } catch {
+                tags = null;
+            }
+        }
 
-        // 3. Create Interaction and AI Job in a transaction
-        // @ts-ignore: Prisma client needs regeneration to include Interaction model
         const result = await prisma.$transaction(async (tx) => {
             // @ts-ignore: Prisma client needs regeneration to include Interaction model
             const interaction = await tx.interaction.create({
@@ -65,7 +78,7 @@ export async function POST(req: Request) {
                     id: interaction_id,
                     contactId: contact_id,
                     audioObjectKey: audio_object_key,
-                    tags: tags,
+                    tags: (tags ?? undefined) as Prisma.InputJsonValue | undefined,
                     createdBy: session.id,
                 },
             });
