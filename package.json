@@ -11,7 +11,6 @@
     "prisma:generate:local": "dotenv -e .env.local.dev -- prisma generate",
     "prisma:migrate": "dotenv -- prisma migrate dev",
     "prisma:migrate:local": "dotenv -e .env.local.dev -- prisma migrate dev",
-    "prisma:migrate:deploy:local": "tsx scripts/migrate-local.ts",
     "prisma:studio:local": "dotenv -e .env.local.dev -- prisma studio",
     "export-table": "dotenv -- tsx scripts/export-table.ts",
     "import-table": "dotenv -- tsx scripts/import-table.ts",

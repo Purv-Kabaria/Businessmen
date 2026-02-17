@@ -1,5 +1,5 @@
 import pytesseract
-from PIL import Image, ImageEnhance, ImageFilter
+from PIL import Image, ImageEnhance, ImageFilter, ImageOps
 import requests
 import base64
 from io import BytesIO
@@ -10,33 +10,59 @@ import json
 
 def extract_text_with_ollama(image: Image.Image) -> Tuple[str, dict, bool]:
     """
-    Try to extract text and structured data using Ollama vision model (gemma3)
-    Returns (raw_text, structured_data, success)
+    Enhanced Vision Pass: Uses Llama 3.2 Vision with specialized preprocessing for blurry/complex images.
     """
     try:
-        # Convert image to base64
-        buffered = BytesIO()
-        image.save(buffered, format="JPEG")
-        img_base64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
-        
-        # Ollama configuration
         OLLAMA_MODEL = "gemma3:4b"
         OLLAMA_HOST = "http://127.0.0.1:11434"
-        
-        prompt = """You are a specialized OCR assistant. Extract ALL contact information from this business card image with 100% accuracy.
 
-Return a JSON object with strictly these fields:
-- name: Full name (Properly capitalized)
-- phone: Primary mobile number (Include country code if present)
-- email: Primary email address (PAY EXTREME ATTENTION TO THIS. Correct any obvious OCR errors like 'at' instead of '@', or dots read as commas)
-- company: Full company name
-- title: Job title or designation
-- raw_text: Every single character or word found on the card transcribed literally
-
-If any field is missing, use an empty string.
-JSON ONLY. No other text."""
+        # OPTIMIZATION: Reduce Image Size for Memory Efficiency
+        # 11B model + 2200px image = High VRAM usage.
+        # 1280px is sufficient for most business cards and uses significantly less memory.
+        w, h = image.size
+        # Calculate aspect ratio preserving resize
+        max_dim = 1280 
+        if w > max_dim or h > max_dim:
+            image.thumbnail((max_dim, max_dim), Image.Resampling.LANCZOS)
         
-        print(f"[OCR] Trying Ollama vision model ({OLLAMA_MODEL}) for structured extraction...")
+        # Smart Preprocessing (Lightweight)
+        # Unsharp mask is still good, but skip the upscale if it makes it huge
+        processed_image = image.filter(ImageFilter.UnsharpMask(radius=1.5, percent=120, threshold=3))
+        
+        # Gentle Contrast (1.1x is safer)
+        enhancer = ImageEnhance.Contrast(processed_image)
+        processed_image = enhancer.enhance(1.1)
+
+        buffered = BytesIO()
+        processed_image.save(buffered, format="JPEG", quality=95)
+        img_base64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
+        
+        # Two-stage prompt: Transcribe THEN Structure. 
+        # This prevents the model from skipping text it can't immediately fit into a JSON schema.
+        prompt = """As a high-precision business card digitizer, perform a deep scan of this image.
+The image might be BLURRY or have LOW CONTRAST. 
+Use your visual reasoning to infer characters from context (e.g., if you see 'email: bob@gmai.com', infer 'gmail.com').
+
+STEP 1: Transcribe EVERY string found on the card literally.
+STEP 2: Map the strings to these fields.
+
+JSON Format:
+{
+  "name": "Full Name",
+  "phone": "Best contact number",
+  "email": "Proper email address",
+  "company": "Full company name",
+  "title": "Job title",
+  "raw_text": "LITERAL TRANSCRIPTION OF EVERYTHING"
+}
+
+STRICT: 
+1. Look for text ANYWHERE, including dark footers/headers with white text.
+2. If text is blurry, make the most logical guess based on business card patterns.
+3. Do not return placeholders like 'John Doe'. If a field is not found, use "".
+Accuracy is the only metric that matters."""
+        
+        print(f"[OCR] Deep Vision Scan with {OLLAMA_MODEL}...")
         
         response = requests.post(
             f"{OLLAMA_HOST}/api/generate",
@@ -47,10 +73,11 @@ JSON ONLY. No other text."""
                 "stream": False,
                 "format": "json",
                 "options": {
-                    "temperature": 0.1
+                    "temperature": 0.0,
+                    "num_ctx": 1024  # Reduced from 4096 to save VRAM
                 }
             },
-            timeout=30
+            timeout=90  # Increased for CPU inference
         )
         
         if response.status_code == 200:
@@ -58,44 +85,54 @@ JSON ONLY. No other text."""
             raw_response = data.get('response', '').strip()
             try:
                 structured = json.loads(raw_response)
-                # Ensure all fields exist
-                for field in ['name', 'phone', 'email', 'company', 'title', 'raw_text']:
-                    if field not in structured:
-                        structured[field] = ""
                 
-                print(f"[OCR] Ollama structured extraction successful")
+                # Check for "helpful" AI hallucinations
+                placeholders = ["john doe", "jane smith", "example.com", "123 main", "tech corp"]
+                for k, v in structured.items():
+                    if isinstance(v, str) and any(p in v.lower() for p in placeholders):
+                        structured[k] = ""
+
+                print(f"[OCR] Vision pass successful")
                 return structured.get('raw_text', ''), structured, True
             except Exception as e:
-                print(f"[OCR] Ollama JSON parse error: {e}")
+                print(f"[OCR] Vision JSON error: {e}")
                 return raw_response, {}, True
         else:
-            print(f"[OCR] Ollama request failed: {response.status_code}")
+            print(f"[OCR] Vision pass failed with status: {response.status_code}")
+            print(f"[OCR] Response: {response.text[:200]}")
             return "", {}, False
             
-    except requests.exceptions.ConnectionError:
-        print("[OCR] Ollama not available (connection refused)")
-        return "", {}, False
-    except requests.exceptions.Timeout:
-        print("[OCR] Ollama request timed out")
-        return "", {}, False
     except Exception as e:
-        print(f"[OCR] Ollama error: {str(e)}")
+        print(f"[OCR] Vision error: {str(e)}")
         return "", {}, False
 
 
-def smart_extract_fields(text: str) -> dict:
+def consolidate_results(vision_data: dict, tesseract_text: str) -> dict:
     """
-    Fallback: Uses LLM to extract structured fields from raw Tesseract text
+    The 'Judge' Pass: Uses a text-only LLM to resolve discrepancies between 
+    Vision AI (good at context) and Tesseract (good at raw characters).
     """
     try:
         OLLAMA_MODEL = "gemma3:4b"
         OLLAMA_HOST = "http://127.0.0.1:11434"
         
-        prompt = f"""Extract contact information from this OCR text:
-{text}
+        prompt = f"""You are a master data consolidator. I have results from two OCR engines.
+Combine them into one 100% accurate contact record.
 
-Return a JSON object with: name, phone, email, company, title.
-Return ONLY JSON."""
+ENGINE A (Vision AI Findings):
+{json.dumps(vision_data, indent=2)}
+
+ENGINE B (Raw Text Dump):
+{tesseract_text}
+
+STRICT RULES:
+1. Prefer ENGINE B for specific strings like Emails and Website URLs if Engine A looks simplified.
+2. Prefer ENGINE A for Person Names and Titles as it understands layout better.
+3. Clean up generic noise (e.g., 'M:' or 'E:' prefixes).
+4. DO NOT invent data. If unsure, leave empty.
+
+OUTPUT JSON ONLY:
+{{"name": "", "phone": "", "email": "", "company": "", "title": ""}}"""
 
         response = requests.post(
             f"{OLLAMA_HOST}/api/generate",
@@ -104,13 +141,57 @@ Return ONLY JSON."""
                 "prompt": prompt,
                 "stream": False,
                 "format": "json",
-                "options": {"temperature": 0.1}
+                "options": {"temperature": 0.0}
+            },
+            timeout=60  # Increased for safety
+        )
+        
+        if response.status_code == 200:
+            return json.loads(response.json().get('response', '{}'))
+    except Exception as e:
+        print(f"[OCR] Consolidation failed: {e}")
+    return vision_data
+
+
+def smart_extract_fields(text: str) -> dict:
+    """
+    Fallback: Uses LLM to extract structured fields from raw Tesseract text.
+    Includes validation to prevent "random" data.
+    """
+    try:
+        OLLAMA_MODEL = "gemma3:4b"
+        OLLAMA_HOST = "http://127.0.0.1:11434"
+        
+        prompt = f"""Process this raw OCR text into contact fields.
+RULES:
+1. ONLY use information found in the text below.
+2. If info is missing, use "".
+3. DO NOT use generic values like "John Doe".
+
+TEXT:
+{text}
+
+JSON: {{"name": "", "phone": "", "email": "", "company": "", "title": ""}}"""
+
+        response = requests.post(
+            f"{OLLAMA_HOST}/api/generate",
+            json={
+                "model": OLLAMA_MODEL,
+                "prompt": prompt,
+                "stream": False,
+                "format": "json",
+                "options": {"temperature": 0.0}
             },
             timeout=10
         )
         
         if response.status_code == 200:
-            return json.loads(response.json().get('response', '{}'))
+            result = json.loads(response.json().get('response', '{}'))
+            # Filter hallucinations
+            placeholders = ["john doe", "example.com", "tech corp"]
+            if any(p in str(result).lower() for p in placeholders):
+                return {}
+            return result
     except:
         pass
     return {}
@@ -149,6 +230,10 @@ def preprocess_image(image: Image.Image) -> List[Image.Image]:
     brightness_enhancer = ImageEnhance.Brightness(gray)
     brightened = brightness_enhancer.enhance(1.5)
     variations.append(brightened)
+    
+    # Inverted (Negative) - Critical for white text on dark backgrounds
+    inverted = ImageOps.invert(gray)
+    variations.append(inverted)
     
     return variations
 

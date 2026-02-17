@@ -7,19 +7,6 @@ import { GetObjectCommand } from "@aws-sdk/client-s3";
 
 const BUCKET_NAME = process.env.MINIO_BUCKET || process.env.MINIO_BUCKET_NAME || "htt-businessmen";
 
-type InteractionWithAudio = {
-    id: string;
-    createdAt: Date;
-    contactId: string;
-    audioObjectKeys: string[];
-    transcript: string | null;
-    structuredSnapshot: unknown;
-    tags: unknown;
-    createdBy: string;
-    contact: { id: string; name: string | null; phone: string; email: string | null; company: string | null; currentStage: string; intentTags: unknown };
-    createdByUser: { id: string; fullName: string; email: string };
-};
-
 export async function GET(req: NextRequest) {
     try {
         // 1. Verify authentication and role
@@ -58,28 +45,33 @@ export async function GET(req: NextRequest) {
         const search = searchParams.get("search") || "";
         const skip = (page - 1) * limit;
 
-        const whereClause = {
-            audioObjectKeys: { isEmpty: false } as const,
-            ...(search && {
-                OR: [
-                    { transcript: { contains: search, mode: "insensitive" as const } },
-                    {
-                        contact: {
-                            OR: [
-                                { name: { contains: search, mode: "insensitive" as const } },
-                                { email: { contains: search, mode: "insensitive" as const } },
-                                { company: { contains: search, mode: "insensitive" as const } },
-                                { phone: { contains: search, mode: "insensitive" as const } },
-                            ]
-                        }
-                    }
-                ]
-            }),
+        // 3. Build search filter
+        const where: any = {
+            audioObjectKey: {
+                not: null,
+            },
         };
 
-        const [interactionsRows, total] = await Promise.all([
+        if (search) {
+            where.OR = [
+                { transcript: { contains: search, mode: "insensitive" } },
+                {
+                    contact: {
+                        OR: [
+                            { name: { contains: search, mode: "insensitive" } },
+                            { email: { contains: search, mode: "insensitive" } },
+                            { company: { contains: search, mode: "insensitive" } },
+                            { phone: { contains: search, mode: "insensitive" } },
+                        ]
+                    }
+                }
+            ];
+        }
+
+        // 4. Fetch interactions with audio and related contact
+        const [interactions, total] = await Promise.all([
             prisma.interaction.findMany({
-                where: whereClause as any,
+                where,
                 include: {
                     contact: {
                         select: {
@@ -106,35 +98,44 @@ export async function GET(req: NextRequest) {
                 skip,
                 take: limit,
             }),
-            prisma.interaction.count({
-                where: whereClause as any,
-            }),
+            prisma.interaction.count({ where }),
         ]);
 
-        const interactions = interactionsRows as unknown as InteractionWithAudio[];
+        // 4. Generate signed URLs for audio files
         const interactionsWithUrls = await Promise.all(
             interactions.map(async (interaction) => {
-                const raw = interaction as unknown as { audioObjectKeys?: string[]; audioObjectKey?: string | null };
-                const keys = (raw.audioObjectKeys?.length ? raw.audioObjectKeys : raw.audioObjectKey ? [raw.audioObjectKey] : []) as string[];
-                const audioUrls: (string | null)[] = [];
-                for (const key of keys) {
+                let audioUrl = null;
+                if (interaction.audioObjectKey) {
                     try {
+                        console.log(`[API /audio] Generating signed URL for key: ${interaction.audioObjectKey}`);
                         const command = new GetObjectCommand({
                             Bucket: BUCKET_NAME,
-                            Key: key,
+                            Key: interaction.audioObjectKey,
                         });
-                        const url = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
-                        audioUrls.push(url);
+                        audioUrl = await getSignedUrl(s3Client, command, {
+                            expiresIn: 3600, // 1 hour
+                        });
+                        console.log(`[API /audio] Successfully generated URL for ${interaction.audioObjectKey}`);
                     } catch (error) {
-                        console.error(`[API /audio] Failed to generate signed URL for ${key}:`, error);
-                        audioUrls.push(null);
+                        console.error(
+                            `[API /audio] Failed to generate signed URL for ${interaction.audioObjectKey}:`,
+                            error
+                        );
+                        console.error(`[API /audio] S3 Config:`, {
+                            bucket: BUCKET_NAME,
+                            endpoint: process.env.MINIO_ENDPOINT,
+                            hasAccessKey: !!process.env.MINIO_ACCESS_KEY,
+                            hasSecretKey: !!process.env.MINIO_SECRET_KEY,
+                        });
                     }
+                } else {
+                    console.log(`[API /audio] No audioObjectKey for interaction ${interaction.id}`);
                 }
 
                 return {
                     id: interaction.id,
-                    audioUrls,
-                    audioObjectKeys: keys,
+                    audioUrl,
+                    audioObjectKey: interaction.audioObjectKey,
                     transcript: interaction.transcript,
                     structuredSnapshot: interaction.structuredSnapshot,
                     tags: interaction.tags,

@@ -7,7 +7,6 @@ import {
     createSuccessResponse,
     verifySession,
 } from "@/lib/api-utils";
-import { normalizePhone } from "@/modules/capture/utils";
 import { randomUUID } from "node:crypto";
 
 export async function POST(req: Request) {
@@ -18,54 +17,31 @@ export async function POST(req: Request) {
         }
 
         const formData = await req.formData();
-        const contact_id_from_body = (formData.get("contact_id") as string) || undefined;
-        const phone = (formData.get("phone") as string) || undefined;
-        const contact_name = (formData.get("contact_name") as string) || undefined;
-        const contact_email = (formData.get("contact_email") as string) || undefined;
+        const contact_id = formData.get("contact_id") as string;
         const audio_file = formData.get("audio_file") as File | null;
         const tags_json = formData.get("tags") as string | null;
 
-        let contact_id: string;
-
-        if (contact_id_from_body) {
-            const existing = await prisma.contact.findUnique({
-                where: { id: contact_id_from_body },
-            });
-            if (!existing) {
-                return createErrorResponse("CONTACT_NOT_FOUND", "The specified contact does not exist", 404);
-            }
-            contact_id = existing.id;
-        } else if (phone) {
-            const normalizedPhone = normalizePhone(phone);
-            const existingByPhone = await prisma.contact.findUnique({
-                where: { phone: normalizedPhone },
-            });
-            if (existingByPhone) {
-                contact_id = existingByPhone.id;
-            } else {
-                const newContact = await prisma.contact.create({
-                    data: {
-                        name: contact_name || "Unknown",
-                        email: contact_email?.trim() || null,
-                        phone: normalizedPhone,
-                        sourceMode: "manual",
-                        pendingSync: false,
-                    },
-                });
-                contact_id = newContact.id;
-            }
-        } else {
-            return createErrorResponse("MISSING_CONTACT_ID", "Contact ID or phone is required.", 400);
+        if (!contact_id) {
+            return createErrorResponse("MISSING_CONTACT_ID", "Contact ID is required", 400);
         }
 
-        const audio_upload_id = randomUUID();
+        // 1. Validate contact exists
+        const contact = await prisma.contact.findUnique({
+            where: { id: contact_id },
+        });
+
+        if (!contact) {
+            return createErrorResponse("CONTACT_NOT_FOUND", "The specified contact does not exist", 404);
+        }
+
+        const interaction_id = randomUUID();
         let audio_object_key: string | null = null;
 
         if (audio_file && typeof audio_file.arrayBuffer === "function") {
             try {
                 const bucket_name = process.env.MINIO_BUCKET || "interactions-audio";
                 await ensureBucketExists(bucket_name);
-                audio_object_key = `interactions/${audio_upload_id}.webm`;
+                audio_object_key = `interactions/${interaction_id}.webm`;
                 const audio_buffer = Buffer.from(await audio_file.arrayBuffer());
                 await s3Client.send(
                     new PutObjectCommand({
@@ -96,35 +72,18 @@ export async function POST(req: Request) {
         }
 
         const result = await prisma.$transaction(async (tx) => {
-            const existingInteraction = await tx.interaction.findFirst({
-                where: { contactId: contact_id },
-                orderBy: { createdAt: "desc" },
-            });
-
-            if (existingInteraction && audio_object_key) {
-                await tx.interaction.update({
-                    where: { id: existingInteraction.id },
-                    data: {
-                        audioObjectKeys: [...existingInteraction.audioObjectKeys, audio_object_key],
-                    },
-                });
-                return {
-                    interaction: { ...existingInteraction, audioObjectKeys: [...existingInteraction.audioObjectKeys, audio_object_key] },
-                    ai_job: null as { id: string } | null,
-                };
-            }
-
-            const new_interaction_id = randomUUID();
+            // @ts-ignore: Prisma client needs regeneration to include Interaction model
             const interaction = await tx.interaction.create({
                 data: {
-                    id: new_interaction_id,
+                    id: interaction_id,
                     contactId: contact_id,
-                    audioObjectKeys: audio_object_key ? [audio_object_key] : [],
+                    audioObjectKey: audio_object_key,
                     tags: (tags ?? undefined) as Prisma.InputJsonValue | undefined,
                     createdBy: session.id,
                 },
             });
 
+            // @ts-ignore: Prisma client needs regeneration to include AiJob model
             const ai_job = await tx.aiJob.create({
                 data: {
                     interactionId: interaction.id,
@@ -137,8 +96,8 @@ export async function POST(req: Request) {
 
         return createSuccessResponse({
             interaction_id: result.interaction.id,
-            ai_job_id: result.ai_job?.id ?? null,
-            status: result.ai_job ? "Interaction created and AI job scheduled" : "Audio appended to existing interaction",
+            ai_job_id: result.ai_job.id,
+            status: "Interaction created and AI job scheduled",
         });
     } catch (error) {
         return handleUnexpectedError(error, "CREATE_INTERACTION");

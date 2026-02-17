@@ -5,7 +5,7 @@ High-performance FastAPI backend for business card OCR and audio transcription w
 ## ✨ Features
 
 ### 1. **Smart OCR Processing**
-- 🎯 **Primary**: Ollama gemma3 vision model (best accuracy)
+- 🎯 **Primary**: Ollama llama3.2-vision:11b model (best accuracy)
 - 🔄 **Fallback**: Multi-config Tesseract OCR
 - 📧 Email extraction & scoring
 - 📱 Phone normalization (10-digit format)

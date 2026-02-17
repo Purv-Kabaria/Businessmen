@@ -65,17 +65,13 @@ model Interaction {
   id                 String   @id @default(uuid())
   contactId          String   @map("contact_id")
   contact            Contact  @relation(fields: [contactId], references: [id])
-  audioObjectKeys    String[] @default([]) @map("audio_object_keys")
+  audioObjectKey     String?  @map("audio_object_key")
   transcript         String?
   structuredSnapshot Json?    @map("structured_snapshot")
   tags               Json?
   createdBy          String   @map("created_by")
   createdByUser      User     @relation("CreatedBy", fields: [createdBy], references: [id])
   createdAt          DateTime @default(now()) @map("created_at")
-  dealProfitable     Boolean? @map("deal_profitable")
-  dealEngaging       Boolean? @map("deal_engaging")
-  dealWorthy         Boolean? @map("deal_worthy")
-  dealRemarks        String?  @map("deal_remarks")
   aiJobs             AiJob[]
 
   @@map("interactions")
