@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { SortingState, Updater } from "@tanstack/react-table";
@@ -62,19 +62,7 @@ function resolveSortField(columnId: string | undefined): string {
   }
 }
 
-function AdminUsersPageFallback() {
-  return (
-    <main className="min-h-screen bg-secondary p-4 sm:p-6 md:p-8">
-      <div className="mx-auto max-w-7xl space-y-4 sm:space-y-6">
-        <div className="h-6 w-48 animate-pulse rounded bg-muted" />
-        <div className="h-12 w-64 animate-pulse rounded bg-muted" />
-        <div className="h-64 animate-pulse rounded bg-muted" />
-      </div>
-    </main>
-  );
-}
-
-function AdminUsersPageContent() {
+export default function AdminUsersPage() {
   const router = useRouter();
 
   // URL Query States
@@ -439,13 +427,5 @@ function AdminUsersPageContent() {
         onClear={handleClearSort}
       />
     </main>
-  );
-}
-
-export default function AdminUsersPage() {
-  return (
-    <Suspense fallback={<AdminUsersPageFallback />}>
-      <AdminUsersPageContent />
-    </Suspense>
   );
 }

@@ -1,5 +1,28 @@
 import { NextResponse } from "next/server";
 import { ZodError } from "zod";
+import jwt from "jsonwebtoken";
+import { cookies } from "next/headers";
+import { UserJwtPayload } from "@/types/user";
+
+/**
+ * Verifies the user session from cookies
+ */
+export async function verifySession(): Promise<UserJwtPayload | null> {
+  try {
+    const cookieStore = await cookies();
+    const token = cookieStore.get("token")?.value;
+
+    if (!token) return null;
+
+    const jwtSecret = process.env.JWT_SECRET;
+    if (!jwtSecret) return null;
+
+    const decoded = jwt.verify(token, jwtSecret) as UserJwtPayload;
+    return decoded;
+  } catch (error) {
+    return null;
+  }
+}
 
 /**
  * Standard API error response structure
