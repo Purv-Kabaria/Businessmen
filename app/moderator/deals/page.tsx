@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
-import { Loader2, ChevronLeft, ChevronRight, Pencil, Download, Mail, Trash2 } from "lucide-react";
+import { Loader2, ChevronLeft, ChevronRight, Pencil, Download, Mail, Trash2, Inbox } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
@@ -101,6 +101,7 @@ const followupStatusOptions: { value: string; label: string }[] = [
     { value: FOLLOWUP_NONE_VALUE, label: "—" },
     { value: "Met", label: "Met" },
     { value: "Email_sent", label: "Email sent" },
+    { value: "Meeting_scheduled", label: "Meeting scheduled" },
     { value: "Closed", label: "Closed" },
     { value: "Rejected", label: "Rejected" },
 ];
@@ -135,6 +136,14 @@ export default function ModeratorDealsPage() {
     const [editDraft, setEditDraft] = useState<Omit<Partial<DealRow>, "contact"> & { contact?: Partial<DealRow["contact"]> } | null>(null);
     const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
     const [deletingId, setDeletingId] = useState<string | null>(null);
+
+    // Fetch replies & auto-schedule
+    const [fetchingReplies, setFetchingReplies] = useState(false);
+    const [repliesResult, setRepliesResult] = useState<{
+        processed: number;
+        scheduled: { threadId: string; subject: string; attendeeEmail: string | null; meetLink: string | null; start: string; end: string }[];
+        errors: string[];
+    } | null>(null);
 
     useEffect(() => {
         fetchDeals(page);
@@ -244,6 +253,38 @@ export default function ModeratorDealsPage() {
             toast.error(e instanceof Error ? e.message : "Failed to send email");
         } finally {
             setSendingEmailId(null);
+        }
+    }
+
+    async function handleFetchRepliesAndSchedule() {
+        setFetchingReplies(true);
+        setRepliesResult(null);
+        try {
+            const res = await fetch("/api/integrations/meeting-schedule/run", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify({ maxThreads: 15, inboxQuery: "in:inbox is:unread" }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data?.error?.message ?? "Failed to run");
+            const result = data.data ?? {};
+            setRepliesResult({
+                processed: result.processed ?? 0,
+                scheduled: result.scheduled ?? [],
+                errors: result.errors ?? [],
+            });
+            if ((result.scheduled ?? []).length > 0) {
+                toast.success(`Scheduled ${result.scheduled.length} meeting(s); reply emails sent.`);
+            } else if ((result.errors ?? []).length > 0) {
+                toast.info("Run complete. No new meetings scheduled; check results for details.");
+            } else {
+                toast.info("No promising replies found in inbox. Update follow-up below for leads.");
+            }
+        } catch (e) {
+            toast.error(e instanceof Error ? e.message : "Failed to fetch replies");
+        } finally {
+            setFetchingReplies(false);
         }
     }
 
@@ -391,6 +432,17 @@ export default function ModeratorDealsPage() {
                         </div>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
+                        <Button
+                            variant="default"
+                            size="sm"
+                            className="gap-1.5 text-xs"
+                            onClick={handleFetchRepliesAndSchedule}
+                            disabled={fetchingReplies}
+                            title="Fetch Gmail replies from DB contacts, classify with AI, and send meeting invite emails for promising leads"
+                        >
+                            {fetchingReplies ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Inbox className="h-3.5 w-3.5" />}
+                            Fetch replies & schedule
+                        </Button>
                         <Button
                             variant="outline"
                             size="sm"
@@ -731,6 +783,59 @@ export default function ModeratorDealsPage() {
                             <Button onClick={saveEditModal} disabled={!editRow || updatingId !== null}>
                                 {updatingId === editRow?.id ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save Changes"}
                             </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+
+                {/* Fetch replies & schedule result */}
+                <Dialog open={!!repliesResult} onOpenChange={(open) => { if (!open) setRepliesResult(null); }}>
+                    <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+                        <DialogHeader>
+                            <DialogTitle>Replies & schedule result</DialogTitle>
+                            <DialogDescription>
+                                Threads from DB contacts were checked. Promising leads got a meeting and a reply email with the Meet link. For others, update the follow-up value in the table below.
+                            </DialogDescription>
+                        </DialogHeader>
+                        {repliesResult && (
+                            <div className="space-y-4 text-sm">
+                                <p className="text-muted-foreground">
+                                    Processed <strong>{repliesResult.processed}</strong> thread(s). Scheduled <strong>{repliesResult.scheduled.length}</strong> meeting(s).
+                                </p>
+                                {repliesResult.scheduled.length > 0 && (
+                                    <div>
+                                        <p className="font-medium mb-2">Scheduled (reply email sent)</p>
+                                        <ul className="list-disc list-inside space-y-1 text-muted-foreground">
+                                            {repliesResult.scheduled.map((s, i) => (
+                                                <li key={s.threadId ?? i}>
+                                                    {s.subject ?? "—"} → {s.attendeeEmail ?? "—"}
+                                                    {s.start && (
+                                                        <span className="block text-xs mt-0.5">
+                                                            {format(new Date(s.start), "PPp")}
+                                                            {s.meetLink && " · "}
+                                                            {s.meetLink && (
+                                                                <a href={s.meetLink} target="_blank" rel="noreferrer" className="text-primary underline">Join</a>
+                                                            )}
+                                                        </span>
+                                                    )}
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                )}
+                                {repliesResult.errors.length > 0 && (
+                                    <div>
+                                        <p className="font-medium text-destructive mb-2">Errors</p>
+                                        <ul className="list-disc list-inside space-y-1 text-muted-foreground text-xs">
+                                            {repliesResult.errors.map((err, i) => (
+                                                <li key={i}>{err}</li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                        <DialogFooter>
+                            <Button onClick={() => setRepliesResult(null)}>Close</Button>
                         </DialogFooter>
                     </DialogContent>
                 </Dialog>
