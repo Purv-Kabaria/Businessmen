@@ -1,10 +1,33 @@
 const DB_NAME = "finbridge-capture";
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 const STORE_DRAFT = "draft";
 const STORE_CONTACTS = "contacts";
+const STORE_AUDIO_TRANSCRIPT_QUEUE = "audio_transcript_queue";
 const DEVICE_ID_KEY = "finbridge-device-id";
 
 export type DraftMode = "stall" | "field";
+
+export type AudioTranscriptQueueItemStatus = "pending" | "processing" | "done" | "failed";
+
+const STALE_PROCESSING_MS = 5 * 60 * 1000;
+
+export const MAX_AUDIO_TRANSCRIPT_RETRIES = 3;
+
+export const DEFAULT_CLEANUP_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+
+export type AudioTranscriptQueueItem = {
+  id: string;
+  audio_blob: Blob;
+  contact_local_id: string;
+  source_mode: DraftMode;
+  status: AudioTranscriptQueueItemStatus;
+  retry_count: number;
+  last_error: string | null;
+  created_at: number;
+  processed_at: number | null;
+  contact_server_id?: string | null;
+  status_updated_at?: number;
+};
 
 export type DraftData = {
   mode: DraftMode;
@@ -30,6 +53,7 @@ export type ContactRecord = {
   updated_at: number;
   event_id: string | null;
   audio_local_id?: string | null;
+  last_sync_error?: string | null;
 };
 
 function openDb(): Promise<IDBDatabase> {
@@ -44,6 +68,9 @@ function openDb(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains(STORE_CONTACTS)) {
         db.createObjectStore(STORE_CONTACTS, { keyPath: "local_id" });
+      }
+      if (!db.objectStoreNames.contains(STORE_AUDIO_TRANSCRIPT_QUEUE)) {
+        db.createObjectStore(STORE_AUDIO_TRANSCRIPT_QUEUE, { keyPath: "id" });
       }
     };
   });
@@ -87,9 +114,378 @@ export async function getAllContacts(): Promise<ContactRecord[]> {
   });
 }
 
+export type UpdateContactPatch = Partial<Omit<ContactRecord, "local_id">>;
+
+export async function updateContact(local_id: string, patch: UpdateContactPatch): Promise<void> {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_CONTACTS, "readwrite");
+    const store = tx.objectStore(STORE_CONTACTS);
+    const getReq = store.get(local_id);
+    getReq.onerror = () => {
+      db.close();
+      reject(getReq.error);
+    };
+    getReq.onsuccess = () => {
+      const existing = getReq.result as ContactRecord | undefined;
+      if (!existing) {
+        db.close();
+        reject(new Error(`Contact not found: ${local_id}`));
+        return;
+      }
+      const updated: ContactRecord = {
+        ...existing,
+        ...patch,
+        local_id: existing.local_id,
+        updated_at: Date.now(),
+      };
+      const putReq = store.put(updated);
+      putReq.onerror = () => {
+        db.close();
+        reject(putReq.error);
+      };
+      putReq.onsuccess = () => {
+        db.close();
+        resolve();
+      };
+    };
+  });
+}
+
 export async function getUnsyncedContacts(): Promise<ContactRecord[]> {
   const all = await getAllContacts();
-  return all.filter((c) => c.pending_sync);
+  const unsynced = all.filter((c) => c.pending_sync);
+  return unsynced.sort((a, b) => a.updated_at - b.updated_at);
+}
+
+export type EnqueueAudioTranscriptItemInput = {
+  audio_blob: Blob;
+  contact_local_id: string;
+  source_mode: DraftMode;
+};
+
+export async function enqueueAudioTranscriptItem(
+  item: EnqueueAudioTranscriptItemInput
+): Promise<string> {
+  const id = crypto.randomUUID();
+  const now = Date.now();
+  const record: AudioTranscriptQueueItem = {
+    id,
+    audio_blob: item.audio_blob,
+    contact_local_id: item.contact_local_id,
+    source_mode: item.source_mode,
+    status: "pending",
+    retry_count: 0,
+    last_error: null,
+    created_at: now,
+    processed_at: null,
+  };
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_AUDIO_TRANSCRIPT_QUEUE, "readwrite");
+    const store = tx.objectStore(STORE_AUDIO_TRANSCRIPT_QUEUE);
+    const req = store.add(record);
+    req.onerror = () => {
+      db.close();
+      reject(req.error);
+    };
+    req.onsuccess = () => {
+      db.close();
+      resolve(id);
+    };
+  });
+}
+
+async function getAllAudioTranscriptItems(): Promise<AudioTranscriptQueueItem[]> {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_AUDIO_TRANSCRIPT_QUEUE, "readonly");
+    const store = tx.objectStore(STORE_AUDIO_TRANSCRIPT_QUEUE);
+    const req = store.getAll();
+    req.onerror = () => {
+      db.close();
+      reject(req.error);
+    };
+    req.onsuccess = () => {
+      db.close();
+      resolve((req.result as AudioTranscriptQueueItem[]) ?? []);
+    };
+  });
+}
+
+async function resetStaleProcessingItems(): Promise<void> {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_AUDIO_TRANSCRIPT_QUEUE, "readwrite");
+    const store = tx.objectStore(STORE_AUDIO_TRANSCRIPT_QUEUE);
+    const getReq = store.getAll();
+    getReq.onerror = () => {
+      db.close();
+      reject(getReq.error);
+    };
+    getReq.onsuccess = () => {
+      const all = (getReq.result as AudioTranscriptQueueItem[]) ?? [];
+      const now = Date.now();
+      const stale = all.filter(
+        (item) =>
+          item.status === "processing" &&
+          (item.status_updated_at ?? item.created_at) < now - STALE_PROCESSING_MS
+      );
+      if (stale.length === 0) {
+        db.close();
+        resolve();
+        return;
+      }
+      let done = 0;
+      for (const item of stale) {
+        const updated: AudioTranscriptQueueItem = {
+          ...item,
+          status: "pending",
+          status_updated_at: now,
+        };
+        const putReq = store.put(updated);
+        putReq.onerror = () => {
+          db.close();
+          reject(putReq.error);
+        };
+        putReq.onsuccess = () => {
+          done++;
+          if (done === stale.length) {
+            db.close();
+            resolve();
+          }
+        };
+      }
+    };
+  });
+}
+
+export async function getPendingAudioTranscriptItems(
+  limit: number
+): Promise<AudioTranscriptQueueItem[]> {
+  await resetStaleProcessingItems();
+  const all = await getAllAudioTranscriptItems();
+  const pending = all.filter((item) => item.status === "pending");
+  const sorted = pending.sort((a, b) => a.created_at - b.created_at);
+  return sorted.slice(0, limit);
+}
+
+export type UpdateAudioTranscriptItemStatusOptions = {
+  last_error?: string | null;
+  processed_at?: number | null;
+  retry_count_increment?: number;
+};
+
+export async function updateAudioTranscriptItemStatus(
+  id: string,
+  status: AudioTranscriptQueueItemStatus,
+  options?: UpdateAudioTranscriptItemStatusOptions
+): Promise<void> {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_AUDIO_TRANSCRIPT_QUEUE, "readwrite");
+    const store = tx.objectStore(STORE_AUDIO_TRANSCRIPT_QUEUE);
+    const getReq = store.get(id);
+    getReq.onerror = () => {
+      db.close();
+      reject(getReq.error);
+    };
+    getReq.onsuccess = () => {
+      const existing = getReq.result as AudioTranscriptQueueItem | undefined;
+      if (!existing) {
+        db.close();
+        reject(new Error(`Audio transcript queue item not found: ${id}`));
+        return;
+      }
+      const now = Date.now();
+      let retry_count = existing.retry_count;
+      if (options?.retry_count_increment != null && options.retry_count_increment > 0) {
+        retry_count = Math.min(
+          existing.retry_count + options.retry_count_increment,
+          MAX_AUDIO_TRANSCRIPT_RETRIES
+        );
+      }
+      const processed_at =
+        options?.processed_at !== undefined
+          ? options.processed_at
+          : status === "failed"
+            ? now
+            : status === "pending"
+              ? null
+              : existing.processed_at;
+      const updated: AudioTranscriptQueueItem = {
+        ...existing,
+        status,
+        retry_count,
+        status_updated_at: now,
+        ...(options?.last_error !== undefined && { last_error: options.last_error }),
+        processed_at,
+      };
+      const putReq = store.put(updated);
+      putReq.onerror = () => {
+        db.close();
+        reject(putReq.error);
+      };
+      putReq.onsuccess = () => {
+        db.close();
+        resolve();
+      };
+    };
+  });
+}
+
+export type RecordAudioTranscriptFailureResult = { will_retry: boolean };
+
+export async function recordAudioTranscriptItemFailure(
+  id: string,
+  last_error: string
+): Promise<RecordAudioTranscriptFailureResult> {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_AUDIO_TRANSCRIPT_QUEUE, "readwrite");
+    const store = tx.objectStore(STORE_AUDIO_TRANSCRIPT_QUEUE);
+    const getReq = store.get(id);
+    getReq.onerror = () => {
+      db.close();
+      reject(getReq.error);
+    };
+    getReq.onsuccess = () => {
+      const existing = getReq.result as AudioTranscriptQueueItem | undefined;
+      if (!existing) {
+        db.close();
+        reject(new Error(`Audio transcript queue item not found: ${id}`));
+        return;
+      }
+      if (existing.status === "done") {
+        db.close();
+        reject(new Error("Cannot record failure for item that is already done"));
+        return;
+      }
+      if (existing.status === "failed") {
+        db.close();
+        reject(new Error("Cannot record failure for item that is already failed"));
+        return;
+      }
+      const newRetryCount = Math.min(
+        existing.retry_count + 1,
+        MAX_AUDIO_TRANSCRIPT_RETRIES
+      );
+      const will_retry = newRetryCount < MAX_AUDIO_TRANSCRIPT_RETRIES;
+      const now = Date.now();
+      const updated: AudioTranscriptQueueItem = {
+        ...existing,
+        status: will_retry ? "pending" : "failed",
+        last_error,
+        retry_count: newRetryCount,
+        processed_at: will_retry ? null : now,
+        status_updated_at: now,
+      };
+      const putReq = store.put(updated);
+      putReq.onerror = () => {
+        db.close();
+        reject(putReq.error);
+      };
+      putReq.onsuccess = () => {
+        db.close();
+        resolve({ will_retry });
+      };
+    };
+  });
+}
+
+export async function setContactServerId(
+  id: string,
+  server_id: string
+): Promise<void> {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_AUDIO_TRANSCRIPT_QUEUE, "readwrite");
+    const store = tx.objectStore(STORE_AUDIO_TRANSCRIPT_QUEUE);
+    const getReq = store.get(id);
+    getReq.onerror = () => {
+      db.close();
+      reject(getReq.error);
+    };
+    getReq.onsuccess = () => {
+      const existing = getReq.result as AudioTranscriptQueueItem | undefined;
+      if (!existing) {
+        db.close();
+        reject(new Error(`Audio transcript queue item not found: ${id}`));
+        return;
+      }
+      const updated: AudioTranscriptQueueItem = {
+        ...existing,
+        contact_server_id: server_id,
+      };
+      const putReq = store.put(updated);
+      putReq.onerror = () => {
+        db.close();
+        reject(putReq.error);
+      };
+      putReq.onsuccess = () => {
+        db.close();
+        resolve();
+      };
+    };
+  });
+}
+
+export type CleanupAudioTranscriptQueueOptions = {
+  olderThanMs?: number;
+};
+
+export type CleanupAudioTranscriptQueueResult = {
+  deleted: number;
+};
+
+export async function cleanupAudioTranscriptQueue(
+  options?: CleanupAudioTranscriptQueueOptions
+): Promise<CleanupAudioTranscriptQueueResult> {
+  const olderThanMs = Math.max(0, options?.olderThanMs ?? DEFAULT_CLEANUP_AGE_MS);
+  const cutoff = Date.now() - olderThanMs;
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_AUDIO_TRANSCRIPT_QUEUE, "readwrite");
+    const store = tx.objectStore(STORE_AUDIO_TRANSCRIPT_QUEUE);
+    const getReq = store.getAll();
+    getReq.onerror = () => {
+      db.close();
+      reject(getReq.error);
+    };
+    getReq.onsuccess = () => {
+      const all = (getReq.result as AudioTranscriptQueueItem[]) ?? [];
+      const toDelete = all.filter(
+        (item) =>
+          (item.status === "done" || item.status === "failed") &&
+          item.processed_at != null &&
+          item.processed_at < cutoff
+      );
+      if (toDelete.length === 0) {
+        db.close();
+        resolve({ deleted: 0 });
+        return;
+      }
+      let completed = 0;
+      let failed = false;
+      for (const item of toDelete) {
+        const delReq = store.delete(item.id);
+        delReq.onerror = () => {
+          if (!failed) {
+            failed = true;
+            db.close();
+            reject(delReq.error);
+          }
+        };
+        delReq.onsuccess = () => {
+          completed++;
+          if (completed === toDelete.length) {
+            db.close();
+            resolve({ deleted: toDelete.length });
+          }
+        };
+      }
+    };
+  });
 }
 
 export async function getDraft(mode: DraftMode): Promise<DraftData | null> {
