@@ -451,3 +451,6 @@ It guarantees:
 - AI-enhanced meeting preparedness
 
 This document serves as the authoritative implementation guide for the AI coding agent.
+
+cd python_backend
+venv\Scripts\activate

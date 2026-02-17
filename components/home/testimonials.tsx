@@ -104,8 +104,8 @@ function TestimonialCard({
                 key={i}
                 className={`h-4 w-4 ${
                   i < testimonial.rating
-                    ? "text-chart-1 fill-chart-1"
-                    : "text-muted"
+                    ? "text-primary fill-primary"
+                    : "text-muted-foreground"
                 }`}
               />
             ))}

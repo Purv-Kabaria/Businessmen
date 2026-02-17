@@ -3,6 +3,9 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   experimental: {
+    serverActions: {
+      bodySizeLimit: "10mb",
+    },
     optimizePackageImports: [
       "lucide-react",
       "date-fns",
@@ -25,6 +28,14 @@ const nextConfig: NextConfig = {
       {
         protocol: "https",
         hostname: "res.cloudinary.com",
+      },
+      {
+        protocol: "http",
+        hostname: "localhost",
+      },
+      {
+        protocol: "http",
+        hostname: "127.0.0.1",
       },
     ],
   },

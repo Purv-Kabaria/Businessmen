@@ -5,7 +5,11 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { AnimatePresence, motion } from "framer-motion";
-import { Loader2, CheckCircle2, UserRound, Phone, Mail, Mic, MicOff } from "lucide-react";
+import Link from "next/link";
+import { Loader2, CheckCircle2, UserRound, Phone, Mail, Mic, MicOff, Square, Play, Trash2, ArrowLeft } from "lucide-react";
+
+import { useMediaRecorder } from "@/hooks/use-media-recorder";
+import { db } from "@/lib/db";
 
 import {
   AlertDialog,
@@ -29,6 +33,22 @@ import {
 import { Input } from "@/components/ui/input";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { CardScanButton } from "@/modules/capture/card-scan-button";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Badge } from "@/components/ui/badge";
+import { Check, ChevronsUpDown, X } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { STALL_INTENTS } from "@/modules/capture/constants";
 import { addContact, clearDraft, getDeviceId, getDraft, setDraft, type DraftData } from "@/modules/capture/db";
 import { hasLocalDuplicate } from "@/modules/capture/local-duplicate";
@@ -59,8 +79,10 @@ export default function FieldPage() {
   const [showDraftPrompt, setShowDraftPrompt] = useState(false);
   const [pendingDraft, setPendingDraft] = useState<DraftData | null>(null);
   const [duplicateConfirmPending, setDuplicateConfirmPending] = useState<StallLeadFormValues | null>(null);
-  const [audioLocalId, setAudioLocalId] = useState<string | null>(null);
   const [capturedCardImage, setCapturedCardImage] = useState<File | null>(null);
+
+  const { isRecording, audioBlob, startRecording, stopRecording, clearRecording } = useMediaRecorder();
+
   const submitLockRef = useRef(false);
   const draftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -100,7 +122,7 @@ export default function FieldPage() {
           email: email.trim() || undefined,
           intent_tags,
           updated_at: 0,
-        }).catch(() => {});
+        }).catch(() => { });
         draftTimerRef.current = null;
       }, DRAFT_DEBOUNCE_MS);
     });
@@ -113,44 +135,77 @@ export default function FieldPage() {
   function handleContinueDraft() {
     if (pendingDraft) {
       form.reset(draftToFormValues(pendingDraft));
-      clearDraft("field").catch(() => {});
+      clearDraft("field").catch(() => { });
     }
     setPendingDraft(null);
     setShowDraftPrompt(false);
   }
 
   function handleDiscardDraft() {
-    clearDraft("field").catch(() => {});
+    clearDraft("field").catch(() => { });
     setPendingDraft(null);
     setShowDraftPrompt(false);
   }
 
-  async function saveContactToIndexedDB(values: StallLeadFormValues) {
-    const local_id = crypto.randomUUID();
+  async function saveContactToApi(values: StallLeadFormValues) {
     const device_id = getDeviceId();
-    const now = Date.now();
-    await addContact({
-      local_id,
-      server_id: null,
-      name: values.name.trim(),
-      phone: values.phone,
-      email: values.email?.trim() || null,
-      company: null,
-      intent_tags: values.intent_tags,
-      source_mode: "field",
-      version: 1,
-      pending_sync: true,
-      device_id,
-      updated_at: now,
-      event_id: null,
-      audio_local_id: audioLocalId ?? null,
+
+    const contactRes = await fetch("/api/contacts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({
+        name: values.name.trim(),
+        phone: values.phone,
+        email: values.email?.trim() || "",
+        intentTags: values.intent_tags,
+        sourceMode: "field",
+        deviceId: device_id,
+      }),
     });
-    clearDraft("field").catch(() => {});
+
+    const contactJson = await contactRes.json().catch(() => ({}));
+    if (!contactRes.ok) {
+      const msg = contactJson?.error?.message ?? contactJson?.message ?? "Failed to save contact";
+      if (contactRes.status === 401) throw new Error("Please sign in to save contacts.");
+      throw new Error(msg);
+    }
+
+    const contact = contactJson?.data;
+    if (!contact?.id) throw new Error("Invalid response from server");
+
+    if (audioBlob) {
+      const formData = new FormData();
+      formData.append("contact_id", contact.id);
+      formData.append("audio_file", audioBlob, "recording.webm");
+      formData.append("tags", JSON.stringify({ source: "field-capture" }));
+
+      const interactionRes = await fetch("/api/interactions", {
+        method: "POST",
+        credentials: "include",
+        body: formData,
+      });
+
+      if (!interactionRes.ok) {
+        let msg = "audio upload failed";
+        try {
+          const interactionJson = await interactionRes.json();
+          msg = (interactionJson?.error?.message ?? interactionJson?.message ?? msg) as string;
+        } catch {
+          msg = interactionRes.status === 503 ? "storage unavailable (check MinIO)" : "audio upload failed";
+        }
+        console.warn("Audio interaction upload failed:", msg);
+        toast.error(`Contact saved, but ${msg.toLowerCase()}.`);
+      }
+    }
+
+    // Cleanup
+    clearDraft("field").catch(() => { });
     form.reset({ name: "", phone: "", email: "", intent_tags: [] });
-    setAudioLocalId(null);
+    clearRecording();
     setCapturedCardImage(null);
     setShowSuccess(true);
-    toast.success("Saved. We'll sync when you're back online.");
+    toast.success("Saved successfully.");
     setTimeout(() => setShowSuccess(false), 2200);
   }
 
@@ -166,9 +221,10 @@ export default function FieldPage() {
         submitLockRef.current = false;
         return;
       }
-      await saveContactToIndexedDB(values);
-    } catch (e) {
-      toast.error("Could not save. Please try again.");
+      await saveContactToApi(values);
+    } catch (e: any) {
+      console.error(e);
+      toast.error(e.message || "Could not save. Please try again.");
     } finally {
       setIsSubmitting(false);
       submitLockRef.current = false;
@@ -181,10 +237,10 @@ export default function FieldPage() {
     submitLockRef.current = true;
     setIsSubmitting(true);
     try {
-      await saveContactToIndexedDB(duplicateConfirmPending);
+      await saveContactToApi(duplicateConfirmPending);
       setDuplicateConfirmPending(null);
-    } catch (e) {
-      toast.error("Could not save. Please try again.");
+    } catch (e: any) {
+      toast.error(e.message || "Could not save. Please try again.");
     } finally {
       setIsSubmitting(false);
       submitLockRef.current = false;
@@ -193,18 +249,16 @@ export default function FieldPage() {
 
   return (
     <main className="flex min-h-screen flex-col bg-linear-to-b from-secondary/30 to-background">
-      <header className="sticky top-0 z-10 shrink-0 border-b border-border/60 bg-background/95 px-4 py-3 backdrop-blur">
-        <motion.h1
-          initial={{ opacity: 0, y: -4 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.2 }}
-          className="text-lg font-semibold tracking-tight"
-        >
-          Field capture
-        </motion.h1>
-        <p className="mt-0.5 text-xs text-muted-foreground">
-          Quick capture. Save when ready.
-        </p>
+      <header className="sticky top-0 z-10 shrink-0 border-b border-border bg-background px-4 py-3">
+        <div className="flex items-center gap-3">
+          <Link
+            href="/"
+            className="inline-flex h-9 items-center gap-2 rounded-md border-2 border-primary/30 bg-background px-3 py-2 text-sm font-medium text-foreground shadow-sm hover:bg-primary/10 hover:border-primary/50"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Go to home
+          </Link>
+        </div> 
       </header>
 
       <AnimatePresence mode="wait">
@@ -235,9 +289,15 @@ export default function FieldPage() {
               <form id="field-capture-form" onSubmit={form.handleSubmit(onSubmit)} className="mx-auto w-full max-w-xl space-y-4">
                 <div className="flex flex-col gap-2">
                   <CardScanButton
-                    onCaptured={(file) => {
+                    onCaptured={({ image, data }) => {
+                      const file = new File([image], "captured_card.jpg", { type: image.type });
                       setCapturedCardImage(file);
-                      toast.success("Card image captured. Enter details or we'll use it when OCR is ready.");
+
+                      if (data.name) form.setValue("name", data.name);
+                      if (data.phone) form.setValue("phone", data.phone);
+                      if (data.email) form.setValue("email", data.email);
+
+                      toast.success("Card data extracted!");
                     }}
                     variant="outline"
                     size="sm"
@@ -305,24 +365,61 @@ export default function FieldPage() {
                     <FormItem>
                       <FormLabel className="text-sm">Interest</FormLabel>
                       <FormControl>
-                        <ToggleGroup
-                          type="multiple"
-                          value={field.value}
-                          onValueChange={field.onChange}
-                          variant="outline"
-                          size="default"
-                          className="grid w-full grid-cols-2 gap-2"
-                        >
-                          {STALL_INTENTS.map((intent) => (
-                            <ToggleGroupItem
-                              key={intent}
-                              value={intent}
-                              className="min-h-10 rounded-lg text-left text-sm data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              role="combobox"
+                              className="w-full justify-between h-auto min-h-12 py-2"
                             >
-                              {intent}
-                            </ToggleGroupItem>
-                          ))}
-                        </ToggleGroup>
+                              {field.value && field.value.length > 0 ? (
+                                <div className="flex flex-wrap gap-1">
+                                  {field.value.map((tag) => (
+                                    <Badge variant="secondary" key={tag} className="mr-1">
+                                      {tag}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              ) : (
+                                <span className="text-muted-foreground">Select interests...</span>
+                              )}
+                              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
+                            <Command>
+                              <CommandInput placeholder="Search intent..." />
+                              <CommandList>
+                                <CommandEmpty>No intent found.</CommandEmpty>
+                                <CommandGroup>
+                                  {STALL_INTENTS.map((intent) => (
+                                    <CommandItem
+                                      value={intent}
+                                      key={intent}
+                                      onSelect={() => {
+                                        const current = field.value || [];
+                                        const updated = current.includes(intent)
+                                          ? current.filter((v) => v !== intent)
+                                          : [...current, intent];
+                                        field.onChange(updated);
+                                      }}
+                                    >
+                                      <Check
+                                        className={cn(
+                                          "mr-2 h-4 w-4",
+                                          field.value?.includes(intent)
+                                            ? "opacity-100"
+                                            : "opacity-0"
+                                        )}
+                                      />
+                                      {intent}
+                                    </CommandItem>
+                                  ))}
+                                </CommandGroup>
+                              </CommandList>
+                            </Command>
+                          </PopoverContent>
+                        </Popover>
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -330,38 +427,53 @@ export default function FieldPage() {
                 />
                 <div className="pt-2">
                   <FormLabel className="text-sm">Voice note (optional)</FormLabel>
-                  <div className="mt-1.5 flex items-center gap-2">
-                    {audioLocalId ? (
-                      <>
-                        <span className="flex items-center gap-1.5 rounded-md bg-primary/10 px-2.5 py-1.5 text-xs text-primary">
-                          <Mic className="h-3.5 w-3.5" />
-                          Voice note added
-                        </span>
+                  <div className="mt-1.5 flex flex-col gap-2">
+                    {audioBlob ? (
+                      <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 rounded-md bg-primary/10 px-3 py-2 text-sm text-primary">
+                          <CheckCircle2 className="h-4 w-4" />
+                          Audio recorded
+                        </div>
                         <Button
                           type="button"
                           variant="ghost"
-                          size="sm"
-                          className="h-8 text-muted-foreground"
-                          onClick={() => setAudioLocalId(null)}
+                          size="icon"
+                          className="h-9 w-9 text-muted-foreground hover:text-destructive"
+                          onClick={clearRecording}
                         >
-                          <MicOff className="h-3.5 w-3.5" />
+                          <Trash2 className="h-4 w-4" />
                         </Button>
-                      </>
+                      </div>
                     ) : (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="h-9 gap-1.5"
-                        onClick={() => setAudioLocalId(crypto.randomUUID())}
-                      >
-                        <Mic className="h-3.5 w-3.5" />
-                        Add voice note ref
-                      </Button>
+                      <div className="flex items-center gap-2">
+                        {!isRecording ? (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-9 gap-1.5"
+                            onClick={startRecording}
+                          >
+                            <Mic className="h-3.5 w-3.5" />
+                            Record Note
+                          </Button>
+                        ) : (
+                          <Button
+                            type="button"
+                            variant="destructive"
+                            size="sm"
+                            className="h-9 gap-1.5 animate-pulse"
+                            onClick={stopRecording}
+                          >
+                            <Square className="h-3.5 w-3.5 fill-current" />
+                            Stop
+                          </Button>
+                        )}
+                      </div>
                     )}
                   </div>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Links this contact for a voice note (Member 2).
+                    Links this contact for a voice note.
                   </p>
                 </div>
               </form>
