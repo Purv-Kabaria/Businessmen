@@ -37,8 +37,7 @@ export default function AudioReviewPage() {
     const [pagination, setPagination] = useState<PaginationInfo | null>(null);
     const [loading, setLoading] = useState(true);
     const [currentPage, setCurrentPage] = useState(1);
-    const [playingKey, setPlayingKey] = useState<string | null>(null);
-    const [audioElements, setAudioElements] = useState<Map<string, HTMLAudioElement>>(new Map());
+    const seekToOnLoadRef = useRef<number | null>(null);
     const [searchQuery, setSearchQuery] = useState("");
     const [debouncedSearch, setDebouncedSearch] = useState("");
     const [generatedTranscripts, setGeneratedTranscripts] = useState<Map<string, string>>(new Map());
@@ -90,9 +89,9 @@ export default function AudioReviewPage() {
 
             setInteractions(result.data.interactions);
             setPagination(result.data.pagination);
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error("Failed to fetch interactions:", error);
-            toast.error(error.message || "Failed to load audio interactions");
+            toast.error(error instanceof Error ? error.message : "Failed to load audio interactions");
         } finally {
             setLoading(false);
         }
@@ -145,9 +144,9 @@ export default function AudioReviewPage() {
             });
 
             toast.success("Summary generated!", { id: toastId });
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error("[Summarize] Error:", error);
-            toast.error(error.message || "Failed to summarize", { id: toastId });
+            toast.error(error instanceof Error ? error.message : "Failed to summarize", { id: toastId });
         } finally {
             setSummarizingId(null);
         }
@@ -165,7 +164,10 @@ export default function AudioReviewPage() {
 
         try {
             const transcriptParts: string[] = [];
-            let finalSnapshotData: any = { ...(interaction.structuredSnapshot || {}) };
+            const allSegments: Array<{ text: string; start: number; end: number }> = [];
+            const allHotspots: Array<{ start: number; end: number; [k: string]: unknown }> = [];
+            let cumulativeOffsetSec = 0;
+            let finalSnapshotData: Record<string, unknown> = { ...(interaction.structuredSnapshot as Record<string, unknown> || {}) };
 
             for (let i = 0; i < urls.length; i++) {
                 const url = urls[i];
@@ -202,7 +204,38 @@ export default function AudioReviewPage() {
                 if (data.emotions) finalSnapshotData.emotions = data.emotions;
                 if (data.sentimentFlow) finalSnapshotData.sentimentFlow = data.sentimentFlow;
                 if (data.voiceEmotion) finalSnapshotData.voiceEmotion = data.voiceEmotion;
-                if (data.hotspots) finalSnapshotData.hotspots = data.hotspots;
+
+                // Timestamp-based segments for sentence-level highlighting and seek
+                const partSegments = Array.isArray(data.segments) ? data.segments : [];
+                let partEndSec = cumulativeOffsetSec;
+                for (const seg of partSegments) {
+                    const start = typeof seg.start === "number" ? seg.start : 0;
+                    const end = typeof seg.end === "number" ? seg.end : start;
+                    const segText = typeof seg.text === "string" ? seg.text : String(seg?.text ?? "").trim();
+                    if (segText) {
+                        allSegments.push({
+                            text: segText,
+                            start: Math.round((cumulativeOffsetSec + start) * 100) / 100,
+                            end: Math.round((cumulativeOffsetSec + end) * 100) / 100,
+                        });
+                        partEndSec = Math.max(partEndSec, cumulativeOffsetSec + end);
+                    }
+                }
+                if (partSegments.length > 0) {
+                    const last = partSegments[partSegments.length - 1];
+                    partEndSec = cumulativeOffsetSec + (typeof last?.end === "number" ? last.end : 0);
+                }
+                const partHotspots = Array.isArray(data.hotspots) ? data.hotspots : [];
+                for (const h of partHotspots) {
+                    const start = typeof h.start === "number" ? h.start : 0;
+                    const end = typeof h.end === "number" ? h.end : start;
+                    allHotspots.push({
+                        ...h,
+                        start: Math.round((cumulativeOffsetSec + start) * 100) / 100,
+                        end: Math.round((cumulativeOffsetSec + end) * 100) / 100,
+                    });
+                }
+                cumulativeOffsetSec = partEndSec;
 
                 // If the backend detected contact info updates in this audio
                 if (data.suggested_contact_info) {
@@ -215,6 +248,8 @@ export default function AudioReviewPage() {
                 }
             }
 
+            if (allSegments.length > 0) finalSnapshotData.segments = allSegments;
+            if (allHotspots.length > 0) finalSnapshotData.hotspots = allHotspots;
             const fullTranscript = transcriptParts.join("\n\n");
 
             setGeneratedTranscripts((prev) => {
@@ -240,8 +275,8 @@ export default function AudioReviewPage() {
             ));
 
             toast.success("Transcription complete", { id: toastId });
-        } catch (e: any) {
-            toast.error(e.message || "Transcription failed", { id: toastId });
+        } catch (e: unknown) {
+            toast.error(e instanceof Error ? e.message : "Transcription failed", { id: toastId });
         } finally {
             setTranscribingId(null);
         }
@@ -298,21 +333,37 @@ export default function AudioReviewPage() {
             setSuggestedUpdate(null);
 
             fetchInteractions(currentPage, debouncedSearch);
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error("Update error:", error);
-            toast.error(error.message || "Failed to update contact", { id: toastId });
+            toast.error(error instanceof Error ? error.message : "Failed to update contact", { id: toastId });
         }
     }
 
     // Audio Player Effects & Handlers
     useEffect(() => {
         if (currentTrack && audioRef.current) {
-            setDuration(currentTrack.duration || null);
-            audioRef.current.src = currentTrack.url;
-            audioRef.current.load();
-            audioRef.current.play().then(() => setIsPlaying(true)).catch(e => {
-                console.log("Play failed", e);
-            });
+            const seekTo = seekToOnLoadRef.current;
+            seekToOnLoadRef.current = null;
+            const el = audioRef.current;
+            const onReady = () => {
+                const d = el.duration;
+                if (d != null && !isNaN(d) && d !== Infinity) {
+                    setDuration(d);
+                }
+                if (seekTo != null) {
+                    const safeTime = (d != null && !isNaN(d) && d !== Infinity)
+                        ? Math.min(seekTo, Math.max(0, d))
+                        : Math.max(0, seekTo);
+                    el.currentTime = safeTime;
+                    setProgress(safeTime);
+                }
+                el.play().then(() => setIsPlaying(true)).catch(e => {
+                    console.log("Play failed", e);
+                });
+            };
+            el.src = currentTrack.url;
+            el.addEventListener("loadedmetadata", onReady, { once: true });
+            el.load();
         }
     }, [currentTrack]);
 
@@ -366,13 +417,14 @@ export default function AudioReviewPage() {
         return `${mins}:${secs.toString().padStart(2, '0')}`;
     };
 
-    function playTrack(interaction: AudioInteraction) {
+    function playTrack(interaction: AudioInteraction, seekToSeconds?: number) {
         const index = selectedAudioIndices[interaction.id] || 0;
         const url = interaction.audioUrls?.[index] ?? null;
         if (!url) {
             toast.error("No audio available");
             return;
         }
+        if (seekToSeconds != null) seekToOnLoadRef.current = seekToSeconds;
         setCurrentTrack({
             id: interaction.id,
             url,
@@ -382,40 +434,8 @@ export default function AudioReviewPage() {
         });
     }
 
-    function handlePlayToggle(interaction: AudioInteraction, index: number) {
-        const key = `${interaction.id}-${index}`;
-        const url = interaction.audioUrls[index];
-        if (!url) {
-            toast.error("Audio URL not available");
-            return;
-        }
-
-        if (playingKey && playingKey !== key) {
-            const currentAudio = audioElements.get(playingKey);
-            if (currentAudio) {
-                currentAudio.pause();
-                currentAudio.currentTime = 0;
-            }
-        }
-
-        let audio = audioElements.get(key);
-        if (!audio) {
-            audio = new Audio(url);
-            audio.onended = () => setPlayingKey(null);
-            audio.onerror = () => {
-                toast.error("Failed to load audio");
-                setPlayingKey(null);
-            };
-            setAudioElements(new Map(audioElements.set(key, audio)));
-        }
-
-        if (playingKey === key) {
-            audio.pause();
-            setPlayingKey(null);
-        } else {
-            audio.play().catch(() => toast.error("Failed to play audio"));
-            setPlayingKey(key);
-        }
+    function handlePause() {
+        setIsPlaying(false);
     }
 
     if (loading && interactions.length === 0) {
@@ -535,15 +555,14 @@ export default function AudioReviewPage() {
                                 key={interaction.id}
                                 interaction={interaction}
                                 onPlay={playTrack}
+                                onPause={handlePause}
                                 onTranscribe={handleTranscribe}
-                                onPlayToggle={handlePlayToggle}
                                 onReviewTranscript={(i) => {
                                     setActiveInteractionId(i.id);
                                     setIsTranscriptOpen(true);
                                 }}
                                 isPlaying={(id) => currentTrack?.id === id && isPlaying}
                                 isTranscribing={transcribingId === interaction.id}
-                                playingKey={playingKey}
                                 selectedAudioIndex={selectedAudioIndices[interaction.id] || 0}
                                 setSelectedAudioIndex={(idx) => setSelectedAudioIndices(prev => ({ ...prev, [interaction.id]: idx }))}
                             />
@@ -588,11 +607,15 @@ export default function AudioReviewPage() {
                 interaction={interactions.find(i => i.id === activeInteractionId) || null}
                 generatedTranscript={activeInteractionId ? generatedTranscripts.get(activeInteractionId) : undefined}
                 onSummarize={handleSummarize}
-                onPlay={playTrack}
-                onSeek={(val) => {
+                onSeek={(seconds) => {
+                    const active = interactions.find(i => i.id === activeInteractionId);
+                    if (!active) return;
                     if (currentTrack?.id === activeInteractionId && audioRef.current) {
-                        audioRef.current.currentTime = val;
-                        setProgress(val);
+                        audioRef.current.currentTime = seconds;
+                        setProgress(seconds);
+                        audioRef.current.play().then(() => setIsPlaying(true)).catch(() => {});
+                    } else {
+                        playTrack(active, seconds);
                     }
                 }}
                 isSummarizing={!!summarizingId}

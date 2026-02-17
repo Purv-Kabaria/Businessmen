@@ -11,6 +11,20 @@ import {
 import { normalizePhone } from "@/modules/capture/utils";
 import { randomUUID } from "node:crypto";
 
+type ContactDelegate = {
+    findUnique: (args: { where: { id: string } | { phone: string } }) => Promise<{ id: string } | null>;
+    create: (args: { data: Record<string, unknown> }) => Promise<{ id: string }>;
+};
+type InteractionDelegate = {
+    findFirst: (args: { where: { contactId: string }; orderBy: { createdAt: "desc" } }) => Promise<{ id: string; audioObjectKeys: string[] } | null>;
+    update: (args: { where: { id: string }; data: { audioObjectKeys: string[] } }) => Promise<{ id: string; audioObjectKeys: string[] }>;
+    create: (args: { data: Record<string, unknown> }) => Promise<{ id: string; audioObjectKeys: string[] }>;
+};
+type AiJobDelegate = {
+    create: (args: { data: { interactionId: string; status: string } }) => Promise<{ id: string }>;
+};
+type PrismaWithModels = typeof prisma & { contact: ContactDelegate; interaction: InteractionDelegate; aiJob: AiJobDelegate };
+
 export async function POST(req: Request) {
     try {
         const session = await verifySession();
@@ -28,8 +42,9 @@ export async function POST(req: Request) {
 
         let contact_id: string;
 
+        const client = prisma as PrismaWithModels;
         if (contact_id_from_body) {
-            const existing = await prisma.contact.findUnique({
+            const existing = await client.contact.findUnique({
                 where: { id: contact_id_from_body },
             });
             if (!existing) {
@@ -38,13 +53,13 @@ export async function POST(req: Request) {
             contact_id = existing.id;
         } else if (phone) {
             const normalizedPhone = normalizePhone(phone);
-            const existingByPhone = await prisma.contact.findUnique({
+            const existingByPhone = await client.contact.findUnique({
                 where: { phone: normalizedPhone },
             });
             if (existingByPhone) {
                 contact_id = existingByPhone.id;
             } else {
-                const newContact = await prisma.contact.create({
+                const newContact = await client.contact.create({
                     data: {
                         name: contact_name || "Unknown",
                         email: contact_email?.trim() || null,
@@ -96,14 +111,15 @@ export async function POST(req: Request) {
             }
         }
 
-        const result = await prisma.$transaction(async (tx) => {
-            const existingInteraction = await tx.interaction.findFirst({
+        const result = await client.$transaction(async (tx) => {
+            const txClient = tx as PrismaWithModels;
+            const existingInteraction = await txClient.interaction.findFirst({
                 where: { contactId: contact_id },
                 orderBy: { createdAt: "desc" },
             });
 
             if (existingInteraction && audio_object_key) {
-                await tx.interaction.update({
+                await txClient.interaction.update({
                     where: { id: existingInteraction.id },
                     data: {
                         audioObjectKeys: [...existingInteraction.audioObjectKeys, audio_object_key],
@@ -116,7 +132,7 @@ export async function POST(req: Request) {
             }
 
             const new_interaction_id = randomUUID();
-            const interaction = await tx.interaction.create({
+            const interaction = await txClient.interaction.create({
                 data: {
                     id: new_interaction_id,
                     contactId: contact_id,
@@ -126,7 +142,7 @@ export async function POST(req: Request) {
                 },
             });
 
-            const ai_job = await tx.aiJob.create({
+            const ai_job = await txClient.aiJob.create({
                 data: {
                     interactionId: interaction.id,
                     status: "pending",

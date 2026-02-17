@@ -3,6 +3,12 @@ import { prisma } from "@/lib/prisma";
 import { createSuccessResponse, createErrorResponse } from "@/lib/api-utils";
 import { normalizePhone, normalizeEmail } from "@/modules/capture/utils";
 
+type PrismaWithContact = typeof prisma & {
+  contact: {
+    findMany: (args: { select: { phone: true; email: true } }) => Promise<{ phone: string; email: string | null }[]>;
+  };
+};
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -15,7 +21,8 @@ export async function POST(request: NextRequest) {
     const normEmail = email?.trim() ? normalizeEmail(email) : null;
     let contacts: { phone: string; email: string | null }[] = [];
     try {
-      contacts = await prisma.contact.findMany({
+      const client = prisma as PrismaWithContact;
+      contacts = await client.contact.findMany({
         select: { phone: true, email: true },
       });
     } catch {

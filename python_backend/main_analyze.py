@@ -80,8 +80,15 @@ class AnalyzeResponse(BaseModel):
 
 
 def _run_sentiment_segments(segments: List[str]) -> List[Dict[str, Any]]:
+    if not segments:
+        return []
     engine = get_sentiment_engine()
-    return engine.analyze(segments)
+    raw = engine.analyze(segments)
+    # Ensure each item has "sentiment" for consumers that expect it (same as "label")
+    return [
+        {**r, "sentiment": r.get("sentiment") or r.get("label", "neutral")}
+        for r in (raw or [])
+    ]
 
 
 def _run_sentiment_transcript(transcript: str) -> List[Dict[str, Any]]:
@@ -93,8 +100,18 @@ def _run_sentiment_transcript(transcript: str) -> List[Dict[str, Any]]:
 
 
 def _run_summary(transcript: str) -> Dict[str, Any]:
+    if not (transcript and transcript.strip()):
+        return {"summary": "", "action_items": []}
     engine = get_summary_engine()
-    return engine.generate_summary(transcript)
+    out = engine.generate_summary(transcript)
+    if not isinstance(out, dict):
+        return {"summary": "", "action_items": []}
+    summary = out.get("summary")
+    action_items = out.get("action_items")
+    return {
+        "summary": str(summary).strip() if summary is not None else "",
+        "action_items": [str(x).strip() for x in (action_items or []) if x is not None and str(x).strip()],
+    }
 
 
 @app.post("/analyze", response_model=AnalyzeResponse)

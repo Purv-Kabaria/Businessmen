@@ -9,12 +9,20 @@ import {
 import { normalizePhone } from "@/modules/capture/utils";
 import { z } from "zod";
 
+type PrismaWithContact = typeof prisma & {
+    contact: {
+        upsert: (args: { where: { phone: string }; update: Record<string, unknown>; create: Record<string, unknown> }) => Promise<unknown>;
+        findUnique: (args: { where: { phone: string }; include?: { interactions: { orderBy: { createdAt: "desc" }; take: number } } }) => Promise<unknown>;
+        findMany: (args: { orderBy: { updatedAt: "desc" }; take: number; include?: { _count: { select: { interactions: true } } } }) => Promise<unknown>;
+    };
+};
+
 const contactSchema = z.object({
     name: z.string().optional(),
     email: z.string().email().optional().or(z.literal("")),
     phone: z.string().min(10, "Phone number must be at least 10 digits"),
     company: z.string().optional(),
-    intentTags: z.any().optional(),
+    intentTags: z.unknown().optional(),
     sourceMode: z.string().default("manual"),
     eventId: z.string().optional(),
     deviceId: z.string().optional(),
@@ -37,7 +45,8 @@ export async function POST(req: Request) {
         const { id } = body;
         const normalizedPhone = normalizePhone(phone);
 
-        const contact = await prisma.contact.upsert({
+        const client = prisma as PrismaWithContact;
+        const contact = await client.contact.upsert({
             where: { phone: normalizedPhone },
             update: {
                 name: name ?? undefined,
@@ -69,12 +78,13 @@ export async function POST(req: Request) {
 
 export async function GET(req: Request) {
     try {
+        const client = prisma as PrismaWithContact;
         const { searchParams } = new URL(req.url);
         const phone = searchParams.get("phone");
 
         if (phone) {
             const normalizedPhone = normalizePhone(phone);
-            const contact = await prisma.contact.findUnique({
+            const contact = await client.contact.findUnique({
                 where: { phone: normalizedPhone },
                 include: {
                     interactions: {
@@ -91,7 +101,7 @@ export async function GET(req: Request) {
             return createSuccessResponse(contact);
         }
 
-        const contacts = await prisma.contact.findMany({
+        const contacts = await client.contact.findMany({
             orderBy: { updatedAt: "desc" },
             take: 50,
             include: {

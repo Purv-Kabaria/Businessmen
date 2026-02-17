@@ -9,6 +9,12 @@ import {
   validateEnvVar,
 } from "@/lib/api-utils";
 
+type PrismaWithModels = typeof prisma & {
+  user: { count: () => Promise<number> };
+  contact: { count: () => Promise<number> };
+  interaction: { count: () => Promise<number> };
+};
+
 export async function GET() {
   try {
     let jwtSecret: string;
@@ -55,7 +61,8 @@ export async function GET() {
       );
     }
 
-    const user = await prisma.user.findUnique({
+    const client = prisma as PrismaWithModels;
+    const user = await client.user.findUnique({
       where: { id: decoded.id },
       select: { id: true, role: true },
     });
@@ -80,11 +87,11 @@ export async function GET() {
     }
 
     const [totalUsers, totalModerators, totalAdmins, totalContacts, totalInteractions] = await Promise.all([
-      prisma.user.count(),
+      client.user.count(),
       prisma.user.count({ where: { role: "MODERATOR" } }),
-      prisma.user.count({ where: { role: "ADMIN" } }),
-      prisma.contact.count(),
-      prisma.interaction.count(),
+      client.user.count({ where: { role: "ADMIN" } }),
+      client.contact.count(),
+      client.interaction.count(),
     ]);
 
     const analytics = {
