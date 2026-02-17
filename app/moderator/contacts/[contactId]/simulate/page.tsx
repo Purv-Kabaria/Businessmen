@@ -38,7 +38,6 @@ export default function SimulationPage() {
     async function fetchSimulation() {
         setLoading(true);
         setError(null);
-        setData(null); // Don't show previous latency/data until this request is fully done
         try {
             const res = await fetch('/api/simulate', {
                 method: 'POST',
@@ -124,10 +123,10 @@ export default function SimulationPage() {
 
             <Separator />
 
-            {/* Warnings Section - only show when there is real content */}
-            {(data.alignment_warning?.trim() || data.commitment_gaps.length > 0) && (
+            {/* Warnings Section */}
+            {(data.alignment_warning || data.commitment_gaps.length > 0) && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
-                    {data.alignment_warning?.trim() && (
+                    {data.alignment_warning && (
                         <Card className="border-destructive/30 min-w-0 overflow-hidden">
                             <CardHeader className="pb-2 px-4 sm:px-6">
                                 <CardTitle className="text-sm font-medium text-destructive flex items-center gap-2">
@@ -174,7 +173,7 @@ export default function SimulationPage() {
                         </CardHeader>
                         <CardContent className="px-4 sm:px-6">
                             <ol className="space-y-3 relative pl-4 border-l border-border ml-1 py-1">
-                                {(data.strategic_sequence.filter((step, i, arr) => arr.findIndex((s) => s.trim() === step.trim()) === i)).map((step, i) => (
+                                {data.strategic_sequence.map((step, i) => (
                                     <li key={i} className="relative min-w-0">
                                         <span className="absolute -left-4 top-0 text-xs text-muted-foreground font-medium">{i + 1}.</span>
                                         <p className="text-sm leading-relaxed wrap-break-word pl-0">{step}</p>
@@ -253,7 +252,7 @@ export default function SimulationPage() {
                             <div className="flex justify-between gap-2">
                                 <span className="shrink-0">Latency:</span>
                                 <span className="text-foreground">
-                                    {loading ? '...' : (data.meta?.latency_ms != null ? `${(data.meta.latency_ms / 1000).toFixed(2)}s` : '—')}
+                                    {loading ? '...' : data.meta?.latency_ms != null ? `${(data.meta.latency_ms / 1000).toFixed(2)}s` : '—'}
                                 </span>
                             </div>
                         </CardContent>

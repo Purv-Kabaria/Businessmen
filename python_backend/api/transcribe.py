@@ -92,15 +92,22 @@ def _transcribe_from_path(temp_path: str, file_size_mb: float, start_time: float
             hotspots = analyze_hotspots(all_segments)
             print(f"[Transcribe] Found {len(hotspots)} important business hotspots.")
 
-            # --- ML Sentiment Analysis (parallel for minimal latency) ---
-            print("[Transcribe] Running Sentiment + SER in parallel...")
-            from utils.sentiment_engine import run_sentiment_and_ser_parallel
+            # --- ML Sentiment Analysis Integration ---
+            print("[Transcribe] Running Advanced ML Sentiment Engine...")
+            from utils.sentiment_engine import analyze_sentiment, analyze_emotions, analyze_conversation_flow, analyze_audio_emotion
 
-            sentiment_data, emotions, sentiment_flow, voice_emotion = run_sentiment_and_ser_parallel(
-                full_text, all_segments, clean_path
-            )
-            if voice_emotion is None:
-                voice_emotion = {"primary_emotion": "unknown", "score": 0.0}
+            # 1. Overall Text Sentiment (Positive/Neutral/Negative)
+            sentiment_data = analyze_sentiment(full_text)
+            
+            # 2. Granular Text Emotions (Joy, Anger, etc.)
+            emotions = analyze_emotions(full_text)
+            
+            # 3. Sentiment Flow (Trajectory)
+            sentiment_flow = analyze_conversation_flow(all_segments)
+            
+            # 4. Voice/Audio Emotion (SER) - The "Vibe Check"
+            print("[Transcribe] Running Voice Emotion Analysis (Wav2Vec2)...")
+            voice_emotion = analyze_audio_emotion(clean_path)
 
             print(f"[Transcribe] Text Sentiment: {sentiment_data.get('sentiment')} (Score: {sentiment_data.get('score')})")
             print(f"[Transcribe] Voice Emotion: {voice_emotion.get('primary_emotion')} (Score: {voice_emotion.get('score')})")
