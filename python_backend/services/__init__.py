@@ -1,0 +1,1 @@
+# Sentiment & Summary microservice components
