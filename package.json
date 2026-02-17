@@ -8,7 +8,10 @@
     "start": "next start",
     "lint": "eslint",
     "prisma:generate": "dotenv -- prisma generate",
+    "prisma:generate:local": "dotenv -e .env.local.dev -- prisma generate",
     "prisma:migrate": "dotenv -- prisma migrate dev",
+    "prisma:migrate:local": "dotenv -e .env.local.dev -- prisma migrate dev",
+    "prisma:studio:local": "dotenv -e .env.local.dev -- prisma studio",
     "export-table": "dotenv -- tsx scripts/export-table.ts",
     "import-table": "dotenv -- tsx scripts/import-table.ts",
     "dev:shared": "dotenv -e .env.shared.dev -- next dev --turbo -p 3000",
@@ -71,9 +74,7 @@
     "tailwind-merge": "^3.3.1",
     "vaul": "^1.1.2",
     "zod": "^4.1.12",
-    "zustand": "^5.0.8",
-    "@aws-sdk/client-s3": "^3.500.0",
-    "@aws-sdk/s3-request-presigner": "^3.500.0"
+    "zustand": "^5.0.8"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
