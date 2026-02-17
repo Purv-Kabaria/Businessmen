@@ -106,11 +106,7 @@ export async function POST(req: Request) {
             upserted++;
         }
         for (const p of payloads.slice(0, upserted)) {
-            try {
-                await addContactUpsertJob(p);
-            } catch {
-                // BullMQ optional
-            }
+            await addContactUpsertJob(p);
         }
         return createSuccessResponse({ enqueued: upserted });
     } catch (dbError: unknown) {

@@ -1,6 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import s3Client, { ensureBucketExists, PutObjectCommand } from "@/lib/s3";
+import { addTranscribeJob } from "@/lib/queue/transcribe";
 import {
     handleUnexpectedError,
     createErrorResponse,
@@ -134,6 +135,10 @@ export async function POST(req: Request) {
 
             return { interaction, ai_job };
         });
+
+        if (result.interaction.audioObjectKeys?.length) {
+            await addTranscribeJob({ interactionId: result.interaction.id });
+        }
 
         return createSuccessResponse({
             interaction_id: result.interaction.id,

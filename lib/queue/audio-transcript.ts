@@ -29,6 +29,11 @@ export function getAudioTranscriptQueue(): Queue<AudioTranscriptJobPayload> {
 export async function addAudioTranscriptJob(
   payload: AudioTranscriptJobPayload
 ): Promise<{ id: string }> {
-  const job = await getQueue().add("upload", payload);
-  return { id: job.id ?? "" };
+  try {
+    const job = await getQueue().add("upload", payload);
+    return { id: job.id ?? "" };
+  } catch (err) {
+    console.error("[audio-transcript queue] Enqueue failed:", err instanceof Error ? err.message : err);
+    return { id: "" };
+  }
 }

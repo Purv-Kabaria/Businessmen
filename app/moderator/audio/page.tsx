@@ -175,7 +175,7 @@ export default function AudioReviewPage() {
                     toast.loading(`Transcribing part ${i + 1} of ${urls.length}...`, { id: toastId });
                 }
 
-                const response = await fetch(`${TRANSCRIBE_API_URL}/api/transcribe`, {
+                const response = await fetch(`${TRANSCRIBE_API_URL}/api/transcribe-by-url`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ audio_url: url }),

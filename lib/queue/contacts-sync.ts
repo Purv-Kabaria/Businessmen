@@ -34,6 +34,11 @@ export function getContactsSyncQueue(): Queue<ContactSyncJobPayload> {
 export async function addContactUpsertJob(
   payload: ContactSyncJobPayload
 ): Promise<{ id: string }> {
-  const job = await getQueue().add(JOB_NAME_UPSERT, payload);
-  return { id: job.id ?? "" };
+  try {
+    const job = await getQueue().add(JOB_NAME_UPSERT, payload);
+    return { id: job.id ?? "" };
+  } catch (err) {
+    console.error("[contacts-sync queue] Enqueue failed:", err instanceof Error ? err.message : err);
+    return { id: "" };
+  }
 }

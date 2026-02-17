@@ -6,8 +6,8 @@
 
 1. **You are signed in** – Both `/api/sync/contacts` and `/api/sync/audio` use `verifySession()`; unauthenticated requests get 401.
 2. **Backend services when syncing**:
-   - **Sync contacts**: Redis (Upstash/BullMQ) must be reachable so `addContactUpsertJob` succeeds.
-   - **Sync audio**: MinIO (or S3) must be running and configured so the audio file can be uploaded; Redis is needed for `addAudioTranscriptJob`.
+   - **Sync contacts**: Redis (BullMQ) optional; API upserts contacts to DB first, then enqueues to `contacts-sync` for async processing. If Redis is down, enqueue fails silently and contacts are still in DB.
+   - **Sync audio**: MinIO (or S3) must be running so the audio file can be uploaded. The API creates the interaction and AiJob in DB, then enqueues a **transcribe** job. If Redis is down, enqueue fails silently and the moderator can transcribe manually.
 
 **Flow summary:**
 
@@ -17,7 +17,7 @@
 | **Offline – Field** | Add contact + record audio → `addContact` + `enqueueAudioTranscriptItem` (blob in IndexedDB). |
 | **Offline – Interaction capture** | Select contact, record audio, Save → `enqueueAudioTranscriptItem(contact_local_id, blob)`. |
 | **Online – Sync contacts** | Button visible; click → POST to `/api/sync/contacts` → BullMQ; client sets `pending_sync: false` for enqueued contacts. |
-| **Online – Sync audio** | Button visible; click → for each pending item: POST to `/api/sync/audio` (upload to S3, enqueue transcript job); client marks item `done`. |
+| **Online – Sync audio** | Button visible; click → for each pending item: POST to `/api/sync/audio` (upload to MinIO/S3, create interaction + AiJob, enqueue **transcribe** job); client marks item `done`. When the transcribe worker runs, it transcribes the audio and updates the interaction (no manual “Transcribe” needed). |
 
 So: **offline capture works without any server**. **Sync works when online and when Redis + (for audio) MinIO/S3 are available.**
 

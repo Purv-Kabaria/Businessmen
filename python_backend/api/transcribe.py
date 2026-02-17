@@ -1,7 +1,9 @@
-from fastapi import APIRouter, File, UploadFile, HTTPException
+from fastapi import APIRouter, File, UploadFile, HTTPException, Body
 import time
 import tempfile
 import os
+import requests
+from pydantic import BaseModel
 
 from api.models import TranscriptionResponse, SummarizeRequest, SummarizeResponse, ExtractContactRequest, ExtractContactResponse
 from utils.whisper_utils import whisper_model
@@ -10,39 +12,11 @@ from utils.audio_preprocess import preprocess_audio
 router = APIRouter()
 
 
-@router.post("/transcribe", response_model=TranscriptionResponse)
-async def transcribe_audio(audio: UploadFile = File(...)):
-    start_time = time.time()
+def _transcribe_from_path(temp_path: str, file_size_mb: float, start_time: float):
+    """Shared pipeline: preprocess, segment, transcribe, sentiment. Caller owns temp_path cleanup."""
+    clean_path = None
 
     try:
-        if not whisper_model:
-            raise HTTPException(
-                status_code=503,
-                detail="Whisper model not loaded."
-            )
-
-        if not audio.content_type or not (
-            audio.content_type.startswith("audio/")
-            or audio.content_type.startswith("video/")
-        ):
-            raise HTTPException(
-                status_code=400,
-                detail="File must be an audio file"
-            )
-
-        contents = await audio.read()
-        file_size_mb = len(contents) / (1024 * 1024)
-
-        print(f"[Transcribe] Processing {audio.filename} ({file_size_mb:.2f}MB)")
-
-        # Save original temp file
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".webm") as temp_audio:
-            temp_audio.write(contents)
-            temp_path = temp_audio.name
-
-        clean_path = None
-
-        try:
             print("[Transcribe] Preprocessing audio (Denoise + Normalize)...")
             clean_path = preprocess_audio(temp_path)
 
@@ -142,39 +116,62 @@ async def transcribe_audio(audio: UploadFile = File(...)):
 
             print(f"[Transcribe] Success ({processing_time}ms)")
             print(f"[Transcribe] Transcript: {full_text[:100]}...")
-            
-            return TranscriptionResponse(
-                success=True,
-                data={
-                    "transcript": full_text,
-                    "segments": all_segments,
-                    "hotspots": hotspots,
-                    "language": combined_language,
-                    # New Sentiment Data
-                    "sentiment": sentiment_data,
-                    "emotions": emotions,
-                    "sentimentFlow": sentiment_flow,
-                    "voiceEmotion": voice_emotion
-                },
-                meta={
-                    "processingTime": round((time.time() - start_time) * 1000, 2),
-                    "audioDuration": round(total_duration, 2),
-                    "languageConfidence": 0.99,
-                    "fileSizeMB": round(file_size_mb, 2),
-                    "model": getattr(whisper_model, "model_size", "unknown"),
-                    "device": getattr(whisper_model, "device", "unknown"),
-                    "enhancement": "Smart Segmentation (25s) + Spectral Gating",
-                    "sentimentEngine": "RoBERTa (Text) + Wav2Vec2 (Audio)"
-                },
-            )
 
-        finally:
-            if os.path.exists(temp_path):
-                os.unlink(temp_path)
-
-            if clean_path and os.path.exists(clean_path):
+            data = {
+                "transcript": full_text,
+                "segments": all_segments,
+                "hotspots": hotspots,
+                "language": combined_language,
+                "sentiment": sentiment_data,
+                "emotions": emotions,
+                "sentimentFlow": sentiment_flow,
+                "voiceEmotion": voice_emotion,
+            }
+            meta = {
+                "processingTime": round((time.time() - start_time) * 1000, 2),
+                "audioDuration": round(total_duration, 2),
+                "languageConfidence": 0.99,
+                "fileSizeMB": round(file_size_mb, 2),
+                "model": getattr(whisper_model, "model_size", "unknown"),
+                "device": getattr(whisper_model, "device", "unknown"),
+                "enhancement": "Smart Segmentation (25s) + Spectral Gating",
+                "sentimentEngine": "RoBERTa (Text) + Wav2Vec2 (Audio)",
+            }
+            return (data, meta, clean_path)
+    finally:
+        if clean_path and os.path.exists(clean_path):
+            try:
                 os.unlink(clean_path)
+            except Exception:
+                pass
 
+
+@router.post("/transcribe", response_model=TranscriptionResponse)
+async def transcribe_audio(audio: UploadFile = File(...)):
+    start_time = time.time()
+    temp_path = None
+    try:
+        if not whisper_model:
+            raise HTTPException(
+                status_code=503,
+                detail="Whisper model not loaded."
+            )
+        if not audio.content_type or not (
+            audio.content_type.startswith("audio/")
+            or audio.content_type.startswith("video/")
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="File must be an audio file"
+            )
+        contents = await audio.read()
+        file_size_mb = len(contents) / (1024 * 1024)
+        print(f"[Transcribe] Processing {audio.filename} ({file_size_mb:.2f}MB)")
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".webm") as temp_audio:
+            temp_audio.write(contents)
+            temp_path = temp_audio.name
+        data, meta, _ = _transcribe_from_path(temp_path, file_size_mb, start_time)
+        return TranscriptionResponse(success=True, data=data, meta=meta)
     except HTTPException:
         raise
     except Exception as e:
@@ -182,6 +179,58 @@ async def transcribe_audio(audio: UploadFile = File(...)):
         import traceback
         traceback.print_exc()
         return TranscriptionResponse(success=False, error=str(e))
+    finally:
+        if temp_path and os.path.exists(temp_path):
+            try:
+                os.unlink(temp_path)
+            except Exception:
+                pass
+
+
+class TranscribeByUrlRequest(BaseModel):
+    audio_url: str
+
+
+@router.post("/transcribe-by-url", response_model=TranscriptionResponse)
+async def transcribe_by_url(req: TranscribeByUrlRequest = Body(...)):
+    start_time = time.time()
+    temp_path = None
+    try:
+        if not whisper_model:
+            raise HTTPException(
+                status_code=503,
+                detail="Whisper model not loaded."
+            )
+        audio_url = (req.audio_url or "").strip()
+        if not audio_url:
+            raise HTTPException(status_code=400, detail="audio_url is required")
+        print(f"[Transcribe] Fetching audio from URL ({len(audio_url)} chars)...")
+        resp = requests.get(audio_url, timeout=120)
+        resp.raise_for_status()
+        contents = resp.content
+        file_size_mb = len(contents) / (1024 * 1024)
+        print(f"[Transcribe] Downloaded {file_size_mb:.2f}MB, processing...")
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".webm") as temp_audio:
+            temp_audio.write(contents)
+            temp_path = temp_audio.name
+        data, meta, _ = _transcribe_from_path(temp_path, file_size_mb, start_time)
+        return TranscriptionResponse(success=True, data=data, meta=meta)
+    except HTTPException:
+        raise
+    except requests.RequestException as e:
+        print(f"[Transcribe-by-URL] Fetch error: {str(e)}")
+        return TranscriptionResponse(success=False, error=f"Failed to fetch audio: {e}")
+    except Exception as e:
+        print(f"Transcription error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return TranscriptionResponse(success=False, error=str(e))
+    finally:
+        if temp_path and os.path.exists(temp_path):
+            try:
+                os.unlink(temp_path)
+            except Exception:
+                pass
 
 
 @router.post("/summarize", response_model=SummarizeResponse)

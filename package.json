@@ -22,7 +22,8 @@
     "dev:offline": "dotenv -e .env.local.dev -- next dev --turbo -H 0.0.0.0 -p 3001",
     "worker:contacts": "dotenv -- tsx workers/contacts-sync-worker.ts",
     "worker:audio": "dotenv -- tsx workers/audio-transcript-worker.ts",
-    "workers": "concurrently \"pnpm worker:contacts\" \"pnpm worker:audio\""
+    "worker:transcribe": "dotenv -- tsx workers/transcribe-worker.ts",
+    "workers": "concurrently \"pnpm worker:contacts\" \"pnpm worker:audio\" \"pnpm worker:transcribe\""
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.500.0",

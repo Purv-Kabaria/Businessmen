@@ -5,7 +5,7 @@ import {
     verifySession,
 } from "@/lib/api-utils";
 import s3Client, { ensureBucketExists, PutObjectCommand } from "@/lib/s3";
-import { addAudioTranscriptJob } from "@/lib/queue/audio-transcript";
+import { addTranscribeJob } from "@/lib/queue/transcribe";
 import { prisma } from "@/lib/prisma";
 
 function isPrismaTableMissingError(e: unknown): boolean {
@@ -89,7 +89,7 @@ export async function POST(req: Request) {
         const interaction = await (prisma as any).interaction.create({
             data: {
                 contactId,
-                audioObjectKey: audio_key,
+                audioObjectKeys: [audio_key],
                 createdBy: session.id,
             },
         });
@@ -97,17 +97,7 @@ export async function POST(req: Request) {
             data: { interactionId: interaction.id, status: "pending" },
         });
 
-        try {
-            await addAudioTranscriptJob({
-                id,
-                contact_local_id,
-                contact_server_id: contact_server_id || null,
-                audio_key,
-                created_by: session.id,
-            });
-        } catch {
-            // BullMQ optional; DB already updated
-        }
+        await addTranscribeJob({ interactionId: interaction.id });
 
         return createSuccessResponse({ enqueued: 1, interactionId: interaction.id });
     } catch (dbError: unknown) {

@@ -9,27 +9,35 @@ const JOB_NAME_UPLOAD = "upload";
 
 async function processUpload(payload: AudioTranscriptJobPayload) {
   const { contact_local_id, contact_server_id, audio_key, created_by } = payload;
-  const db = prisma as unknown as {
-    contact: { findUnique: (args: { where: { id?: string; offlineLocalId?: string } }) => Promise<{ id: string } | null> };
-    interaction: { create: (args: { data: { contactId: string; audioObjectKey: string; createdBy: string } }) => Promise<{ id: string }> };
-    aiJob: { create: (args: { data: { interactionId: string; status: string } }) => Promise<unknown> };
-  };
   let contactId: string;
   if (contact_server_id) {
-    const contact = await db.contact.findUnique({ where: { id: contact_server_id } });
+    const contact = await prisma.contact.findUnique({ where: { id: contact_server_id }, select: { id: true } });
     if (!contact) throw new Error(`Contact not found: ${contact_server_id}`);
     contactId = contact.id;
   } else {
-    const contact = await db.contact.findUnique({ where: { offlineLocalId: contact_local_id } });
+    const contact = await prisma.contact.findUnique({ where: { offlineLocalId: contact_local_id }, select: { id: true } });
     if (!contact) throw new Error(`Contact not found by offline_local_id: ${contact_local_id}`);
     contactId = contact.id;
   }
 
-  const interaction = await db.interaction.create({
-    data: { contactId, audioObjectKey: audio_key, createdBy: created_by },
+  // Idempotency: if an interaction already exists for this contact with this audio key, skip create
+  const existing = await prisma.interaction.findFirst({
+    where: { contactId, audioObjectKeys: { has: audio_key } },
+    select: { id: true },
+  });
+  if (existing) {
+    return;
+  }
+
+  const interaction = await prisma.interaction.create({
+    data: {
+      contactId,
+      audioObjectKeys: [audio_key],
+      createdBy: created_by,
+    },
   });
 
-  await db.aiJob.create({
+  await prisma.aiJob.create({
     data: { interactionId: interaction.id, status: "pending" },
   });
 }
