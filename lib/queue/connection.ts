@@ -32,12 +32,13 @@ let bullmqConnection: IORedis | null = null;
 
 export function getBullMQConnection(): IORedis {
   if (!bullmqConnection) {
-    let redisUrl = process.env.REDIS_URL?.trim();
+    const useLocal = process.env.USE_LOCAL_REDIS === "true" || process.env.USE_LOCAL_REDIS === "1";
+    let redisUrl = useLocal ? "" : process.env.REDIS_URL?.trim();
     if (!redisUrl) {
       redisUrl = LOCAL_REDIS;
       if (process.env.NODE_ENV !== "test") {
         console.warn(
-          "[BullMQ] REDIS_URL not set; using local Redis at 127.0.0.1:6379. Start Redis locally or set REDIS_URL (e.g. Upstash Redis Connect URL)."
+          "[BullMQ] Using local Redis at 127.0.0.1:6379 (REDIS_URL unset or USE_LOCAL_REDIS=true). Start Redis locally."
         );
       }
     }

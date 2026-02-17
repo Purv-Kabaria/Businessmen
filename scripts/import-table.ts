@@ -1,36 +1,27 @@
-import { PrismaClient } from '@prisma/client';
-import fs from 'fs';
-import path from 'path';
-import dotenv from 'dotenv';
+import { PrismaClient, Prisma } from "@prisma/client";
+import fs from "fs";
+import path from "path";
+import dotenv from "dotenv";
 
-// Load .env
 dotenv.config();
 
-// === DB URL MAP FROM ENV ===
+// === DB URL MAP ===
 const DB_MAP: Record<string, string | undefined> = {
     main: process.env.DATABASE_MAIN,
     local: process.env.DATABASE_LOCAL,
 };
 
-// === READ ARGS ===
-const tableName = process.argv[2];
-const dbKey = process.argv[3] || "main";
-
-if (!tableName) {
-    console.error("❌ Please provide a table name.\nUsage: pnpm import-table User [main|local]");
-    process.exit(1);
-}
+// === READ ARG ===
+const dbKey = process.argv[2] || "main";
 
 if (!DB_MAP[dbKey]) {
-    console.error(`❌ DB URL missing for "${dbKey}".`);
-    console.error(`Add DATABASE_MAIN or DATABASE_LOCAL to your .env file.`);
+    console.error(`❌ DB URL missing for "${dbKey}"`);
     process.exit(1);
 }
 
 console.log(`🔌 Using database: ${dbKey}`);
-console.log(`📥 Importing into table: ${tableName}`);
+console.log(`📥 Importing ALL tables...`);
 
-// === INIT PRISMA WITH DYNAMIC URL ===
 const prisma = new PrismaClient({
     datasources: {
         db: {
@@ -40,80 +31,87 @@ const prisma = new PrismaClient({
 });
 
 async function main() {
-    type PrismaModelDelegate = { findMany: () => Promise<{ id: string }[]>; createManyAndReturn?: (args: { data: Record<string, unknown>[] }) => Promise<{ id: string }[]>; deleteMany: (args: { where: { id: { in: string[] } } }) => Promise<unknown> };
-    const model = (prisma as Record<string, PrismaModelDelegate>)[tableName];
+    const baseDir = path.join("db", dbKey);
 
-    if (!model || typeof model.findMany !== "function") {
-        console.error(`❌ Model "${tableName}" not found in Prisma schema.`);
+    if (!fs.existsSync(baseDir)) {
+        console.error(`❌ Directory ${baseDir} does not exist.`);
         process.exit(1);
     }
 
-    const dataDir = path.join("db", dbKey, tableName);
+    const models = Prisma.dmmf.datamodel.models;
 
-    if (!fs.existsSync(dataDir)) {
-        console.error(`❌ Directory ${dataDir} does not exist.`);
-        process.exit(1);
-    }
+    for (const modelMeta of models) {
+        const modelName = modelMeta.name;
+        const model = (prisma as any)[modelName];
 
-    console.log(`📂 Reading JSON files from: ${dataDir}`);
+        if (!model?.findMany) continue;
 
-    const files = fs.readdirSync(dataDir).filter((f) => f.endsWith(".json"));
-    const incomingRecords: Record<string, unknown>[] = [];
+        const dataDir = path.join(baseDir, modelName);
 
-    for (const filename of files) {
-        const filePath = path.join(dataDir, filename);
-        const content = fs.readFileSync(filePath, "utf-8");
-
-        try {
-            incomingRecords.push(JSON.parse(content));
-        } catch (err) {
-            console.error(`❌ Error parsing ${filename}:`, err);
-            process.exit(1);
-        }
-    }
-
-    console.log(`📦 Loaded ${incomingRecords.length} record(s).`);
-
-    // Fetch existing
-    const existing = await model.findMany();
-    const existingIds = new Set(existing.map((r: { id: string }) => r.id));
-    const incomingIds = new Set(incomingRecords.map((r: Record<string, unknown>) => r.id as string));
-
-    // Determine what to delete
-    // Only delete if we have incoming records to replace them with, or if the directory was explicitly empty?
-    // Safety: If incomingRecords is empty, we might be wiping the table.
-    const idsToDelete = [...existingIds].filter((id) => !incomingIds.has(id));
-
-    console.log(`🗑️ Deleting ${idsToDelete.length} removed record(s)...`);
-    if (idsToDelete.length > 0) {
-        await model.deleteMany({
-            where: { id: { in: idsToDelete } },
-        });
-    }
-
-    // Upsert incoming
-    console.log(`⬆️ Upserting ${incomingRecords.length} record(s)...`);
-
-    for (const record of incomingRecords) {
-        if (!record.id) {
-            console.warn("⚠️ Skipping record without id:", record);
+        if (!fs.existsSync(dataDir)) {
+            console.log(`⏭️ Skipping ${modelName} (no folder found)`);
             continue;
         }
 
-        await model.upsert({
-            where: { id: record.id },
-            update: record,
-            create: record,
-        });
+        console.log(`📂 Importing ${modelName}...`);
+
+        const files = fs.readdirSync(dataDir).filter(f => f.endsWith(".json"));
+
+        const incomingRecords: any[] = [];
+
+        for (const file of files) {
+            const filePath = path.join(dataDir, file);
+            const content = fs.readFileSync(filePath, "utf-8");
+
+            try {
+                incomingRecords.push(JSON.parse(content));
+            } catch (err) {
+                console.error(`❌ Error parsing ${file}`);
+                process.exit(1);
+            }
+        }
+
+        console.log(`   📦 Loaded ${incomingRecords.length} record(s)`);
+
+        const existing = await model.findMany({ select: { id: true } });
+        const existingIds = new Set(existing.map((r: any) => r.id));
+        const incomingIds = new Set(incomingRecords.map((r: any) => r.id));
+
+        const idsToDelete = [...existingIds].filter(id => !incomingIds.has(id));
+
+        // SAFETY CHECK — prevent accidental wipe
+        if (incomingRecords.length === 0 && existingIds.size > 0) {
+            console.warn(`⚠️ Skipping delete for ${modelName} (incoming empty)`);
+        } else if (idsToDelete.length > 0) {
+            console.log(`   🗑️ Deleting ${idsToDelete.length} record(s)`);
+            await model.deleteMany({
+                where: { id: { in: idsToDelete } },
+            });
+        }
+
+        console.log(`   ⬆️ Upserting ${incomingRecords.length} record(s)`);
+
+        for (const record of incomingRecords) {
+            if (!record.id) {
+                console.warn(`⚠️ Skipping record without id`);
+                continue;
+            }
+
+            await model.upsert({
+                where: { id: record.id },
+                update: record,
+                create: record,
+            });
+        }
+
+        console.log(`   ✅ ${modelName} import complete`);
     }
 
-    console.log(`✅ Import complete!`);
-    console.log(`   ✔ Upserted: ${incomingRecords.length}`);
-    console.log(`   ✔ Deleted: ${idsToDelete.length}`);
+    console.log(`🎉 Database import finished!`);
 }
 
 main()
-    .catch((err) => {
+    .catch(err => {
         console.error(err);
         process.exit(1);
     })

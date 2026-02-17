@@ -35,6 +35,7 @@ export async function GET(req: NextRequest) {
             include: {
                 contact: { select: { id: true, name: true, phone: true, email: true, company: true } },
                 createdByUser: { select: { id: true, fullName: true, email: true } },
+                aiJobs: { select: { status: true }, orderBy: { createdAt: "desc" }, take: 1 },
             },
             orderBy: { createdAt: "desc" },
         });
@@ -64,11 +65,31 @@ export async function GET(req: NextRequest) {
             "Worthy",
             "Remarks",
             "Captured By",
+            "AI Status",
+            "Transcription",
+            "Sentiment",
+            "Summary",
+            "Tags"
         ];
 
         const rows = interactions.map((item: DealExportRow) => {
             const contact = item.contact;
             const createdBy = item.createdByUser;
+            const snapshot = (item.structuredSnapshot as any) || {};
+            const aiStatus = (item as any).aiJobs?.[0]?.status || "none";
+
+            // Format tags
+            let tagsStr = "";
+            if (item.tags) {
+                if (Array.isArray(item.tags)) {
+                    tagsStr = item.tags.join(", ");
+                } else if (typeof item.tags === "object") {
+                    tagsStr = JSON.stringify(item.tags);
+                } else {
+                    tagsStr = String(item.tags);
+                }
+            }
+
             return [
                 escapeCSV(item.id),
                 escapeCSV(contact.name),
@@ -81,6 +102,11 @@ export async function GET(req: NextRequest) {
                 escapeCSV(formatVerdict(item.dealWorthy ?? undefined)),
                 escapeCSV(item.dealRemarks ?? ""),
                 escapeCSV(createdBy?.fullName ?? ""),
+                escapeCSV(aiStatus),
+                escapeCSV(item.transcript ?? ""),
+                escapeCSV(snapshot.sentiment || snapshot.voiceEmotion || ""),
+                escapeCSV(snapshot.summary || ""),
+                escapeCSV(tagsStr),
             ].join(",");
         });
 

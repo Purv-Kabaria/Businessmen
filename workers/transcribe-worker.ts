@@ -45,7 +45,8 @@ async function processTranscribe(payload: TranscribeJobPayload): Promise<void> {
   });
 
   if (!interaction) {
-    throw new Error(`Interaction not found: ${interactionId}`);
+    console.warn(`[transcribe] Interaction not found: ${interactionId} (skipping, job will complete without retry)`);
+    return;
   }
 
   if (interaction.transcript != null && interaction.transcript.trim().length > 0) {
