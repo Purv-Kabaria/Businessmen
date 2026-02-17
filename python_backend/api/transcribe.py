@@ -3,7 +3,7 @@ import time
 import tempfile
 import os
 
-from api.models import TranscriptionResponse, SummarizeRequest, SummarizeResponse, ExtractContactRequest, ExtractContactResponse
+from api.models import TranscriptionResponse, SummarizeRequest, SummarizeResponse
 from utils.whisper_utils import whisper_model
 from utils.audio_preprocess import preprocess_audio
 
@@ -186,20 +186,3 @@ async def summarize_transcript(req: SummarizeRequest):
     except Exception as e:
         print(f"[Summarize] Error: {str(e)}")
         return SummarizeResponse(success=False, summary="", error=str(e))
-@router.post("/extract-contact", response_model=ExtractContactResponse)
-async def extract_contact_from_text(req: ExtractContactRequest):
-    """
-    Extract contact details from transcript using AI
-    """
-    try:
-        from utils.llm_utils import extract_contact_info
-        
-        data = extract_contact_info(req.text, model=req.model)
-        
-        return ExtractContactResponse(
-            success=True,
-            data=data
-        )
-    except Exception as e:
-        print(f"[ExtractContact] Error: {str(e)}")
-        return ExtractContactResponse(success=False, data=None, error=str(e))

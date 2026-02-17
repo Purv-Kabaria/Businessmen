@@ -12,17 +12,21 @@ export async function GET(req: NextRequest) {
             prisma.interaction.count(),
             prisma.interaction.count({
                 where: {
-                    audioObjectKeys: { isEmpty: false },
+                    audioObjectKey: {
+                        not: null,
+                    },
                 },
             }),
             prisma.interaction.findMany({
                 where: {
-                    audioObjectKeys: { isEmpty: false },
+                    audioObjectKey: {
+                        not: null,
+                    },
                 },
                 take: 3,
                 select: {
                     id: true,
-                    audioObjectKeys: true,
+                    audioObjectKey: true,
                     createdAt: true,
                     contact: {
                         select: {

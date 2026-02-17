@@ -388,7 +388,7 @@ export default function UserPage() {
               </CardHeader>
               <CardContent>
                 {canAccessRole(user.role, "admin") ? (
-                  <Link href="/admin/dashboard">
+                  <Link href="/admin">
                     <Button
                       variant="outline"
                       className="w-full justify-start text-base h-12">

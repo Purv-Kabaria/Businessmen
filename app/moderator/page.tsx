@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { ArrowLeft, Loader2, Users, UserCheck, Shield, FileAudio, TrendingUp } from "lucide-react";
+import { ArrowLeft, Loader2, Users, UserCheck, Shield, FileAudio } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -113,16 +113,16 @@ export default function ModeratorPage() {
             variants={containerVariants}
             initial="hidden"
             animate="visible">
-            <motion.div variants={itemVariants} className="h-full">
-              <Link href="/moderator/users" className="block h-full">
-                <Card className="h-full flex flex-col hover:bg-accent hover:border-primary transition-colors cursor-pointer">
+            <motion.div variants={itemVariants}>
+              <Link href="/moderator/users">
+                <Card className="hover:bg-accent hover:border-primary transition-colors cursor-pointer">
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                       <Users className="h-5 w-5 text-primary" />
                       Manage Users
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="flex-1">
+                  <CardContent>
                     <p className="text-sm text-muted-foreground">
                       View, create, edit, and delete users.
                     </p>
@@ -130,35 +130,18 @@ export default function ModeratorPage() {
                 </Card>
               </Link>
             </motion.div>
-            <motion.div variants={itemVariants} className="h-full">
-              <Link href="/moderator/audio" className="block h-full">
-                <Card className="h-full flex flex-col hover:bg-accent hover:border-primary transition-colors cursor-pointer">
+            <motion.div variants={itemVariants}>
+              <Link href="/moderator/audio">
+                <Card className="hover:bg-accent hover:border-primary transition-colors cursor-pointer">
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                       <FileAudio className="h-5 w-5 text-primary" />
                       Audio Review
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="flex-1">
+                  <CardContent>
                     <p className="text-sm text-muted-foreground">
                       Listen to recorded interactions and view contact details.
-                    </p>
-                  </CardContent>
-                </Card>
-              </Link>
-            </motion.div>
-            <motion.div variants={itemVariants} className="h-full">
-              <Link href="/moderator/deals" className="block h-full">
-                <Card className="h-full flex flex-col hover:bg-accent hover:border-primary transition-colors cursor-pointer">
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <TrendingUp className="h-5 w-5 text-primary" />
-                      Deal Review
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="flex-1">
-                    <p className="text-sm text-muted-foreground">
-                      Mark interactions as profitable, engaging, worthy and add remarks in table form.
                     </p>
                   </CardContent>
                 </Card>
