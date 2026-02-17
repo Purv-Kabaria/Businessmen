@@ -16,8 +16,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Slider } from "@/components/ui/slider";
 import {
     Dialog,
@@ -45,8 +43,8 @@ interface CreatedBy {
 
 interface AudioInteraction {
     id: string;
-    audioUrl: string | null;
-    audioObjectKey: string | null;
+    audioUrls: (string | null)[];
+    audioObjectKeys: string[];
     transcript: string | null;
     structuredSnapshot: any;
     tags: any;
@@ -64,35 +62,29 @@ interface PaginationInfo {
 
 const TRANSCRIBE_API_URL = process.env.NEXT_PUBLIC_TRANSCRIBE_API_URL || 'http://localhost:8000';
 
+type TrackInfo = { id: string; url: string; title: string; subtitle: string; duration?: number };
+
 export default function AudioReviewPage() {
     const [interactions, setInteractions] = useState<AudioInteraction[]>([]);
     const [pagination, setPagination] = useState<PaginationInfo | null>(null);
     const [loading, setLoading] = useState(true);
     const [currentPage, setCurrentPage] = useState(1);
+    const [playingKey, setPlayingKey] = useState<string | null>(null);
+    const [audioElements, setAudioElements] = useState<Map<string, HTMLAudioElement>>(new Map());
     const [searchQuery, setSearchQuery] = useState("");
     const [debouncedSearch, setDebouncedSearch] = useState("");
-
-    // Player State
-    const [currentTrack, setCurrentTrack] = useState<{
-        id: string;
-        url: string;
-        title: string;
-        subtitle: string;
-        duration?: number;
-    } | null>(null);
-    const [isPlaying, setIsPlaying] = useState(false);
-    const [volume, setVolume] = useState(1);
-    const [progress, setProgress] = useState(0);
-    const [duration, setDuration] = useState<number | null>(null);
-    const [isMuted, setIsMuted] = useState(false);
-
-    const audioRef = useRef<HTMLAudioElement | null>(null);
-
-    const [transcribingId, setTranscribingId] = useState<string | null>(null);
-    const [summarizingId, setSummarizingId] = useState<string | null>(null);
-    const [isTranscriptOpen, setIsTranscriptOpen] = useState(false);
-    const [activeInteractionId, setActiveInteractionId] = useState<string | null>(null);
     const [generatedTranscripts, setGeneratedTranscripts] = useState<Map<string, string>>(new Map());
+    const [summarizingId, setSummarizingId] = useState<string | null>(null);
+    const [currentTrack, setCurrentTrack] = useState<TrackInfo | null>(null);
+    const [duration, setDuration] = useState<number | null>(null);
+    const [progress, setProgress] = useState(0);
+    const [volume, setVolume] = useState(1);
+    const [isMuted, setIsMuted] = useState(false);
+    const [isPlaying, setIsPlaying] = useState(false);
+    const [transcribingId, setTranscribingId] = useState<string | null>(null);
+    const [activeInteractionId, setActiveInteractionId] = useState<string | null>(null);
+    const [isTranscriptOpen, setIsTranscriptOpen] = useState(false);
+    const audioRef = useRef<HTMLAudioElement>(null);
 
     const [suggestedUpdate, setSuggestedUpdate] = useState<{
         interactionId: string;
@@ -106,7 +98,7 @@ export default function AudioReviewPage() {
     useEffect(() => {
         const timer = setTimeout(() => {
             setDebouncedSearch(searchQuery);
-            setCurrentPage(1); // Reset to first page on search
+            setCurrentPage(1);
         }, 500);
         return () => clearTimeout(timer);
     }, [searchQuery]);
@@ -273,196 +265,100 @@ export default function AudioReviewPage() {
         }
     }
 
-    async function handleTranscribe(interaction: AudioInteraction) {
-        if (!interaction.audioUrl) {
+    function handlePlayPause(interaction: AudioInteraction, index: number) {
+        const url = interaction.audioUrls[index];
+        if (!url) {
             toast.error("Audio URL not available");
             return;
         }
 
-        setTranscribingId(interaction.id);
-        const toastId = toast.loading("Downloading and transcribing audio...");
+        const key = `${interaction.id}-${index}`;
 
-        try {
-            console.log("[Transcribe] Fetching audio from:", interaction.audioUrl);
-
-            // Download audio file
-            const audioResponse = await fetch(interaction.audioUrl);
-            if (!audioResponse.ok) {
-                throw new Error("Failed to download audio file");
+        if (playingKey && playingKey !== key) {
+            const currentAudio = audioElements.get(playingKey);
+            if (currentAudio) {
+                currentAudio.pause();
+                currentAudio.currentTime = 0;
             }
+        }
 
-            const audioBlob = await audioResponse.blob();
-            console.log("[Transcribe] Audio blob size:", audioBlob.size, "bytes");
+        let audio = audioElements.get(key);
+        if (!audio) {
+            audio = new Audio(url);
+            audio.onended = () => setPlayingKey(null);
+            audio.onerror = () => {
+                toast.error("Failed to load audio");
+                setPlayingKey(null);
+            };
+            setAudioElements(new Map(audioElements.set(key, audio)));
+        }
 
-            // Send to transcription API
-            const formData = new FormData();
-            formData.append('audio', audioBlob, 'recording.webm');
-
-            console.log("[Transcribe] Sending to API:", `${TRANSCRIBE_API_URL}/api/transcribe`);
-
-            const transcribeResponse = await fetch(`${TRANSCRIBE_API_URL}/api/transcribe`, {
-                method: 'POST',
-                body: formData,
+        if (playingKey === key) {
+            audio.pause();
+            setPlayingKey(null);
+        } else {
+            audio.play().catch((error) => {
+                if (error.name === "NotAllowedError") toast.error("Browser blocked autoplay");
+                else toast.error("Failed to play audio");
             });
+            setPlayingKey(key);
+        }
+    }
 
-            const result = await transcribeResponse.json();
-            console.log("[Transcribe] API response:", result);
+    function playTrack(interaction: AudioInteraction) {
+        const url = interaction.audioUrls?.[0] ?? null;
+        if (!url) {
+            toast.error("No audio available");
+            return;
+        }
+        setCurrentTrack({
+            id: interaction.id,
+            url,
+            title: interaction.contact.name || "Unnamed Contact",
+            subtitle: format(new Date(interaction.createdAt), "MMM dd, yyyy"),
+            duration: undefined,
+        });
+    }
 
-            if (!transcribeResponse.ok) {
-                throw new Error(result.error || result.detail || "Transcription failed");
-            }
-
-            if (result.success && result.data?.transcript) {
-                const transcript = result.data.transcript;
-                const segments = result.data.segments;
-                const audioDuration = result.meta.audioDuration;
-                const meta = result.meta;
-
-                // 1. Store locally for immediate UI update
-                setGeneratedTranscripts(new Map(generatedTranscripts.set(interaction.id, transcript)));
-                // Also update the interaction list in state to include structuredSnapshot
-                setInteractions(prev => prev.map(item =>
-                    item.id === interaction.id
-                        ? {
-                            ...item,
-                            transcript,
-                            structuredSnapshot: {
-                                ...(item.structuredSnapshot || {}),
-                                segments,
-                                hotspots: result.data.hotspots,
-                                audioDuration
-                            }
-                        }
-                        : item
-                ));
-
-                // 2. Persist to DB
-                try {
-                    console.log("[Transcribe] Persisting to database with segments and duration...");
-                    const saveResponse = await fetch('/api/interactions/audio', {
-                        method: 'PATCH',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            interactionId: interaction.id,
-                            transcript: transcript,
-                            structuredSnapshot: {
-                                ...(interaction.structuredSnapshot || {}),
-                                segments,
-                                hotspots: result.data.hotspots,
-                                audioDuration
-                            }
-                        })
-                    });
-
-                    if (!saveResponse.ok) {
-                        console.warn("[Transcribe] DB persistence failed");
-                    }
-                } catch (dbError) {
-                    console.error("[Transcribe] DB persistence error:", dbError);
-                }
-
-                toast.success(
-                    `Transcribed in ${result.meta.processingTime}ms (${meta.audioDuration}s audio)`,
-                    { id: toastId, duration: 5000 }
-                );
-
-                console.log("[Transcribe] Success:", {
-                    transcript: transcript.substring(0, 100) + "...",
-                    language: result.data.language,
-                    meta
-                });
-
-                // 3. Extract contact info if possible
-                try {
-                    console.log("[Transcribe] Extracting potential contact updates...");
-                    const extractResponse = await fetch(`${TRANSCRIBE_API_URL}/api/extract-contact`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ text: transcript }),
-                    });
-                    const extractResult = await extractResponse.json();
-                    if (extractResult.success && extractResult.data) {
-                        const { name, company, email } = extractResult.data;
-
-                        // Check if metadata actually changed or is new
-                        const isSomethingNew =
-                            (name && name !== interaction.contact.name) ||
-                            (company && company !== interaction.contact.company) ||
-                            (email && email !== interaction.contact.email);
-
-                        if (isSomethingNew) {
-                            setSuggestedUpdate({
-                                interactionId: interaction.id,
-                                contactId: interaction.contact.id,
-                                name: name || interaction.contact.name,
-                                company: company || interaction.contact.company,
-                                email: email || interaction.contact.email,
-                            });
-                            setIsUpdateModalOpen(true);
-                        }
-                    }
-                } catch (err) {
-                    console.error("[Extract] Failed:", err);
-                }
-            } else {
-                throw new Error("Invalid response format");
-            }
-
-        } catch (error: any) {
-            console.error("[Transcribe] Error:", error);
-            toast.error(error.message || "Failed to transcribe audio", { id: toastId });
+    async function handleTranscribe(interaction: AudioInteraction) {
+        const url = interaction.audioUrls?.[0];
+        if (!url) {
+            toast.error("No audio to transcribe");
+            return;
+        }
+        setTranscribingId(interaction.id);
+        const toastId = toast.loading("Transcribing...");
+        try {
+            const response = await fetch(`${TRANSCRIBE_API_URL}/api/transcribe`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ audio_url: url }),
+            });
+            const result = await response.json();
+            if (!response.ok || !result.success) throw new Error(result.text ? null : (result.error || "Transcription failed"));
+            const text = result.text || "";
+            setGeneratedTranscripts((prev) => {
+                const next = new Map(prev);
+                next.set(interaction.id, text);
+                return next;
+            });
+            await fetch("/api/interactions/audio", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ interactionId: interaction.id, transcript: text }),
+            });
+            toast.success("Transcription complete", { id: toastId });
+        } catch (e: any) {
+            toast.error(e.message || "Transcription failed", { id: toastId });
         } finally {
             setTranscribingId(null);
         }
     }
 
-    function seekTo(time: number, interactionId: string) {
-        // If this interaction isn't the current track, load it
-        if (currentTrack?.id !== interactionId) {
-            const interaction = interactions.find(i => i.id === interactionId);
-            if (interaction && interaction.audioUrl) {
-                setCurrentTrack({
-                    id: interaction.id,
-                    url: interaction.audioUrl,
-                    title: interaction.contact.name || "Unknown Contact",
-                    subtitle: format(new Date(interaction.createdAt), "MMM dd • h:mm a"),
-                    duration: interaction.structuredSnapshot?.audioDuration,
-                });
-                setIsPlaying(true);
-                // We need to wait for metadata to load before seeking
-                // The effect will handle loading the src. 
-                // We can use a small delay or better: a ref/signal
-                setTimeout(() => {
-                    if (audioRef.current) {
-                        audioRef.current.currentTime = time;
-                        setIsPlaying(true);
-                    }
-                }, 500);
-            }
-        } else if (audioRef.current) {
-            audioRef.current.currentTime = time;
-            if (!isPlaying) setIsPlaying(true);
-        }
-    }
-
-    // New Play Handler that sets the global track
-    function playTrack(interaction: AudioInteraction) {
-        if (!interaction.audioUrl) {
-            toast.error("No audio URL available");
-            return;
-        }
-
-        if (currentTrack?.id === interaction.id) {
-            setIsPlaying(!isPlaying);
-        } else {
-            setCurrentTrack({
-                id: interaction.id,
-                url: interaction.audioUrl,
-                title: interaction.contact.name || "Unknown Contact",
-                subtitle: format(new Date(interaction.createdAt), "MMM dd • h:mm a"),
-                duration: interaction.structuredSnapshot?.audioDuration,
-            });
-            setIsPlaying(true);
+    function seekTo(seconds: number, interactionId: string) {
+        if (currentTrack?.id === interactionId && audioRef.current) {
+            audioRef.current.currentTime = seconds;
+            setProgress(seconds);
         }
     }
 
@@ -635,225 +531,258 @@ export default function AudioReviewPage() {
                                 ? "We couldn't find anything matching your search. Try different keywords."
                                 : "Audio recordings will appear here once interactions are captured at the expo."}
                         </p>
-                        {searchQuery && (
-                            <Button variant="link" className="mt-4" onClick={() => setSearchQuery("")}>
-                                Clear all filters
-                            </Button>
-                        )}
                     </div>
                 ) : (
-                    interactions.map((interaction) => {
-                        const generatedTranscript = generatedTranscripts.get(interaction.id);
-                        const displayTranscript = generatedTranscript || interaction.transcript;
-                        const isCurrent = currentTrack?.id === interaction.id;
-
-                        return (
-                            <Card key={interaction.id} className={`overflow-hidden transition-all duration-300 border-2 ${isCurrent ? 'ring-4 ring-primary/10 border-primary shadow-xl' : 'hover:border-muted-foreground/30 shadow-sm'}`}>
-                                <CardHeader className="bg-muted/20 p-3 sm:p-4">
-                                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-                                        <div className="flex items-center gap-3">
-                                            <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                                                <User className="h-4 w-4 text-primary" />
-                                            </div>
-                                            <div className="min-w-0">
-                                                <CardTitle className="text-base font-bold truncate">
-                                                    {interaction.contact.name || "Unknown Business Professional"}
+                    <div className="space-y-4">
+                        {interactions.map((interaction) => {
+                            const displayTranscript = generatedTranscripts.get(interaction.id) || interaction.transcript;
+                            const isCurrent = currentTrack?.id === interaction.id;
+                            return (
+                                <Card key={interaction.id} className="overflow-hidden">
+                                    <CardHeader className="bg-muted/50">
+                                        <div className="flex items-start justify-between">
+                                            <div className="space-y-1">
+                                                <CardTitle className="text-xl">
+                                                    {interaction.contact.name || "Unnamed Contact"}
                                                 </CardTitle>
-                                                <CardDescription className="flex items-center gap-3 text-[10px] font-bold uppercase tracking-wider opacity-70">
+                                                <CardDescription className="flex items-center gap-4">
                                                     <span className="flex items-center gap-1">
-                                                        <Calendar className="h-3 w-3" />
-                                                        {format(new Date(interaction.createdAt), "MMM dd")}
+                                                        <Calendar className="h-3.5 w-3.5" />
+                                                        {format(new Date(interaction.createdAt), "MMM dd, yyyy 'at' h:mm a")}
                                                     </span>
                                                     <span className="flex items-center gap-1">
-                                                        <Clock className="h-3 w-3" />
-                                                        {format(new Date(interaction.createdAt), "h:mm a")}
+                                                        <User className="h-3.5 w-3.5" />
+                                                        {interaction.createdBy.fullName}
                                                     </span>
                                                 </CardDescription>
                                             </div>
-                                        </div>
-
-                                        <div className="flex items-center gap-2">
-                                            <Button
-                                                variant={isCurrent && isPlaying ? "secondary" : "default"}
-                                                size="sm"
-                                                onClick={() => playTrack(interaction)}
-                                                className="h-8 rounded-full px-4 font-black shadow-md text-[10px] transition-all"
-                                            >
-                                                {isCurrent && isPlaying ? (
-                                                    <><Pause className="h-3 w-3 mr-1.5" /> Pause</>
-                                                ) : (
-                                                    <><Play className="h-3 w-3 mr-1.5" /> Listen</>
-                                                )}
-                                            </Button>
-
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                className="h-8 rounded-full shadow-sm text-[10px] font-bold transition-all hover:bg-primary/5"
-                                                onClick={() => handleTranscribe(interaction)}
-                                                disabled={transcribingId === interaction.id}
-                                            >
-                                                {transcribingId === interaction.id ? (
-                                                    <Loader2 className="h-3 w-3 animate-spin mr-1.5" />
-                                                ) : (
-                                                    <Wand2 className="h-3 w-3 mr-1.5 text-primary" />
-                                                )}
-                                                {displayTranscript ? "Retranscribe" : "Transcribe"}
-                                            </Button>
-                                        </div>
-                                    </div>
-                                </CardHeader>
-
-                                <CardContent className="p-3 sm:p-4">
-                                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-                                        {/* Contact Details */}
-                                        <div className="grid grid-cols-2 gap-x-4 gap-y-2.5 bg-muted/30 p-3 sm:p-4 rounded-xl ring-1 ring-border/50">
-                                            <div className="space-y-0.5">
-                                                <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest opacity-60">Company</span>
-                                                <div className="flex items-center gap-1.5 text-xs font-bold truncate">
-                                                    <Building2 className="h-3.5 w-3.5 text-primary/70 shrink-0" />
-                                                    <span className="truncate">{interaction.contact.company || "Not specified"}</span>
+                                            <div className="flex flex-col items-end gap-1">
+                                                <div className="flex flex-wrap gap-1 justify-end">
+                                                    {interaction.audioUrls.map((url, idx) => {
+                                                        const key = `${interaction.id}-${idx}`;
+                                                        const isPlaying = playingKey === key;
+                                                        return (
+                                                            <Button
+                                                                key={key}
+                                                                onClick={() => handlePlayPause(interaction, idx)}
+                                                                variant={isPlaying ? "default" : "outline"}
+                                                                size="sm"
+                                                                disabled={!url}
+                                                                title={url ? `Play recording ${idx + 1}` : "Unavailable"}
+                                                            >
+                                                                {isPlaying ? (
+                                                                    <><Pause className="h-4 w-4 mr-1" /> Pause</>
+                                                                ) : (
+                                                                    <><Play className="h-4 w-4 mr-1" /> {idx + 1}</>
+                                                                )}
+                                                            </Button>
+                                                        );
+                                                    })}
                                                 </div>
-                                            </div>
-                                            <div className="space-y-0.5">
-                                                <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest opacity-60">Phone</span>
-                                                <div className="flex items-center gap-1.5 text-xs font-bold truncate">
-                                                    <Phone className="h-3.5 w-3.5 text-primary/70 shrink-0" />
-                                                    <span className="truncate">{interaction.contact.phone || "No phone"}</span>
-                                                </div>
-                                            </div>
-                                            <div className="space-y-0.5">
-                                                <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest opacity-60">Email</span>
-                                                <div className="flex items-center gap-1.5 text-xs font-bold truncate">
-                                                    <Mail className="h-3.5 w-3.5 text-primary/70 shrink-0" />
-                                                    <span className="truncate">{interaction.contact.email || "No email"}</span>
-                                                </div>
-                                            </div>
-                                            <div className="space-y-0.5">
-                                                <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest opacity-60">Agent</span>
-                                                <div className="flex items-center gap-1.5 text-xs font-bold truncate">
-                                                    <User className="h-3.5 w-3.5 text-primary/70 shrink-0" />
-                                                    <span className="truncate">{interaction.createdBy.fullName.split(' ')[0]}</span>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        {/* Status & Highlights */}
-                                        <div className="flex flex-col justify-center gap-2">
-                                            <div className="flex items-center gap-2">
-                                                <Badge variant="outline" className="bg-primary/5 text-primary border-primary/20 px-2 py-0 text-[10px] font-black">
-                                                    <Tag className="h-2.5 w-2.5 mr-1" />
-                                                    {interaction.contact.currentStage}
-                                                </Badge>
-                                                {interaction.structuredSnapshot?.hotspots && interaction.structuredSnapshot.hotspots.length > 0 && (
-                                                    <Badge className="bg-yellow-500/10 text-yellow-700 dark:text-yellow-400 border-yellow-500/20 px-2 py-0 text-[10px] font-black">
-                                                        <Sparkles className="h-2.5 w-2.5 mr-1" />
-                                                        {interaction.structuredSnapshot.hotspots.length} BI
-                                                    </Badge>
+                                                {interaction.audioUrls.length === 0 && (
+                                                    <span className="text-xs text-muted-foreground">No audio</span>
                                                 )}
                                             </div>
-                                            {interaction.contact.intentTags && (
-                                                <div className="flex flex-wrap gap-1 mt-0.5">
-                                                    {Array.isArray(interaction.contact.intentTags) ? interaction.contact.intentTags.map((tag: string, i: number) => (
-                                                        <span key={i} className="text-[9px] bg-muted px-1.5 py-0 rounded-md font-bold text-muted-foreground uppercase tracking-wider border">#{tag}</span>
-                                                    )) : null}
-                                                </div>
-                                            )}
                                         </div>
-                                    </div>
-
-                                    <div className="space-y-3">
-                                        {displayTranscript && (
-                                            <div className="p-0.5 rounded-xl bg-gradient-to-r from-primary/5 via-background to-primary/5 border shadow-sm">
-                                                <div className="flex items-center justify-between gap-3 p-2.5">
-                                                    <div className="flex items-center gap-2.5">
-                                                        <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                                                            <FileText className="h-3 w-3 text-primary" />
-                                                        </div>
-                                                        <div>
-                                                            <p className="text-[11px] font-black uppercase tracking-tight">Intelligence Ready</p>
-                                                            <p className="text-[9px] text-muted-foreground font-bold opacity-60">AI processed this interaction.</p>
-                                                        </div>
+                                    </CardHeader>
+                                    <CardContent className="pt-6">
+                                        <div className="grid md:grid-cols-2 gap-6">
+                                            {/* Contact Information */}
+                                            <div className="space-y-4">
+                                                <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">
+                                                    Contact Details
+                                                </h3>
+                                                <div className="space-y-3">
+                                                    <div className="flex items-center gap-2">
+                                                        <Phone className="h-4 w-4 text-muted-foreground" />
+                                                        <span className="font-mono text-sm">{interaction.contact.phone}</span>
                                                     </div>
+                                                </div>
+
+                                                <div className="flex items-center gap-2">
                                                     <Button
-                                                        variant="ghost"
+                                                        variant={isCurrent && isPlaying ? "secondary" : "default"}
                                                         size="sm"
-                                                        className="h-8 rounded-lg font-black text-[10px] hover:bg-primary/10 hover:text-primary transition-all px-3"
-                                                        onClick={() => {
-                                                            setActiveInteractionId(interaction.id);
-                                                            setIsTranscriptOpen(true);
-                                                        }}
+                                                        onClick={() => playTrack(interaction)}
+                                                        className="h-8 rounded-full px-4 font-black shadow-md text-[10px] transition-all"
                                                     >
-                                                        Review <ChevronRight className="h-3 w-3 ml-1" />
+                                                        {isCurrent && isPlaying ? (
+                                                            <><Pause className="h-3 w-3 mr-1.5" /> Pause</>
+                                                        ) : (
+                                                            <><Play className="h-3 w-3 mr-1.5" /> Listen</>
+                                                        )}
+                                                    </Button>
+
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        className="h-8 rounded-full shadow-sm text-[10px] font-bold transition-all hover:bg-primary/5"
+                                                        onClick={() => handleTranscribe(interaction)}
+                                                        disabled={transcribingId === interaction.id}
+                                                    >
+                                                        {transcribingId === interaction.id ? (
+                                                            <Loader2 className="h-3 w-3 animate-spin mr-1.5" />
+                                                        ) : (
+                                                            <Wand2 className="h-3 w-3 mr-1.5 text-primary" />
+                                                        )}
+                                                        {displayTranscript ? "Retranscribe" : "Transcribe"}
                                                     </Button>
                                                 </div>
                                             </div>
-                                        )}
-
-                                        {!displayTranscript && interaction.audioUrl && (
-                                            <div className="bg-muted/5 rounded-xl p-6 flex flex-col items-center justify-center text-center border border-dashed border-muted/30">
-                                                <div className="bg-background p-2.5 rounded-full shadow-sm mb-2.5">
-                                                    <Wand2 className="h-4 w-4 text-primary/40" />
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-6 mt-6">
+                                                {/* Contact Details */}
+                                                <div className="grid grid-cols-2 gap-x-4 gap-y-2.5 bg-muted/30 p-3 sm:p-4 rounded-xl ring-1 ring-border/50">
+                                                    <div className="space-y-0.5">
+                                                        <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest opacity-60">Company</span>
+                                                        <div className="flex items-center gap-1.5 text-xs font-bold truncate">
+                                                            <Building2 className="h-3.5 w-3.5 text-primary/70 shrink-0" />
+                                                            <span className="truncate">{interaction.contact.company || "Not specified"}</span>
+                                                        </div>
+                                                    </div>
+                                                    <div className="space-y-0.5">
+                                                        <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest opacity-60">Phone</span>
+                                                        <div className="flex items-center gap-1.5 text-xs font-bold truncate">
+                                                            <Phone className="h-3.5 w-3.5 text-primary/70 shrink-0" />
+                                                            <span className="truncate">{interaction.contact.phone || "No phone"}</span>
+                                                        </div>
+                                                    </div>
+                                                    <div className="space-y-0.5">
+                                                        <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest opacity-60">Email</span>
+                                                        <div className="flex items-center gap-1.5 text-xs font-bold truncate">
+                                                            <Mail className="h-3.5 w-3.5 text-primary/70 shrink-0" />
+                                                            <span className="truncate">{interaction.contact.email || "No email"}</span>
+                                                        </div>
+                                                    </div>
+                                                    <div className="space-y-0.5">
+                                                        <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest opacity-60">Agent</span>
+                                                        <div className="flex items-center gap-1.5 text-xs font-bold truncate">
+                                                            <User className="h-3.5 w-3.5 text-primary/70 shrink-0" />
+                                                            <span className="truncate">{interaction.createdBy.fullName.split(' ')[0]}</span>
+                                                        </div>
+                                                    </div>
                                                 </div>
-                                                <h4 className="text-xs font-black uppercase tracking-tight mb-0.5 text-muted-foreground">Analysis Needed</h4>
-                                                <p className="text-[10px] text-muted-foreground/60 max-w-[200px] leading-tight">
-                                                    Click transcribe to unlock insights.
-                                                </p>
+
+                                                {/* Status & Highlights */}
+                                                <div className="flex flex-col justify-center gap-2">
+                                                    <div className="flex items-center gap-2">
+                                                        <Badge variant="outline" className="bg-primary/5 text-primary border-primary/20 px-2 py-0 text-[10px] font-black">
+                                                            <Tag className="h-2.5 w-2.5 mr-1" />
+                                                            {interaction.contact.currentStage}
+                                                        </Badge>
+                                                        {interaction.structuredSnapshot?.hotspots && interaction.structuredSnapshot.hotspots.length > 0 && (
+                                                            <Badge className="bg-yellow-500/10 text-yellow-700 dark:text-yellow-400 border-yellow-500/20 px-2 py-0 text-[10px] font-black">
+                                                                <Sparkles className="h-2.5 w-2.5 mr-1" />
+                                                                {interaction.structuredSnapshot.hotspots.length} BI
+                                                            </Badge>
+                                                        )}
+                                                    </div>
+                                                    {interaction.contact.intentTags && (
+                                                        <div className="flex flex-wrap gap-1 mt-0.5">
+                                                            {Array.isArray(interaction.contact.intentTags) ? interaction.contact.intentTags.map((tag: string, i: number) => (
+                                                                <span key={i} className="text-[9px] bg-muted px-1.5 py-0 rounded-md font-bold text-muted-foreground uppercase tracking-wider border">#{tag}</span>
+                                                            )) : null}
+                                                        </div>
+                                                    )}
+                                                </div>
                                             </div>
-                                        )}
-                                    </div>
-                                </CardContent>
-                            </Card>
-                        );
-                    })
+                                        </div>
+
+                                        <div className="space-y-3">
+                                            {displayTranscript && (
+                                                <div className="p-1 rounded-2xl bg-linear-to-r from-primary/5 via-background to-primary/5 border shadow-sm">
+                                                    <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center">
+                                                                <FileText className="h-4 w-4 text-primary" />
+                                                            </div>
+                                                            <div>
+                                                                <p className="text-[11px] font-black uppercase tracking-tight">Intelligence Ready</p>
+                                                                <p className="text-[9px] text-muted-foreground font-bold opacity-60">AI processed this interaction.</p>
+                                                            </div>
+                                                        </div>
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            className="h-8 rounded-lg font-black text-[10px] hover:bg-primary/10 hover:text-primary transition-all px-3"
+                                                            onClick={() => {
+                                                                setActiveInteractionId(interaction.id);
+                                                                setIsTranscriptOpen(true);
+                                                            }}
+                                                        >
+                                                            Review <ChevronRight className="h-3 w-3 ml-1" />
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {!displayTranscript && interaction.audioUrls?.length > 0 && (
+                                                <div className="bg-muted/10 rounded-2xl p-10 flex flex-col items-center justify-center text-center border-2 border-dashed border-muted/50">
+                                                    <div className="bg-background p-4 rounded-full shadow-sm mb-4">
+                                                        <Wand2 className="h-6 w-6 text-primary animate-pulse" />
+                                                    </div>
+                                                    <h4 className="text-xs font-black uppercase tracking-tight mb-0.5 text-muted-foreground">Analysis Needed</h4>
+                                                    <p className="text-[10px] text-muted-foreground/60 max-w-[200px] leading-tight">
+                                                        Click transcribe to unlock insights.
+                                                    </p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </CardContent>
+                                </Card >
+                            );
+                        })
+                        }
+                    </div >
                 )}
-            </div>
+            </div >
 
             {/* LOWER PAGINATION */}
-            {!loading && pagination && pagination.totalPages > 1 && (
-                <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
-                    <div className="flex items-center gap-3">
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            disabled={currentPage === 1}
-                            onClick={() => setCurrentPage(prev => prev - 1)}
-                            className="rounded-xl px-4 h-10 font-bold text-xs"
-                        >
-                            <ChevronLeft className="h-4 w-4 mr-1.5" /> Prev
-                        </Button>
+            {
+                !loading && pagination && pagination.totalPages > 1 && (
+                    <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
+                        <div className="flex items-center gap-3">
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={currentPage === 1}
+                                onClick={() => setCurrentPage(prev => prev - 1)}
+                                className="rounded-xl px-4 h-10 font-bold text-xs"
+                            >
+                                <ChevronLeft className="h-4 w-4 mr-1.5" /> Prev
+                            </Button>
 
-                        <div className="flex items-center gap-1.5">
-                            {Array.from({ length: pagination.totalPages }, (_, i) => i + 1)
-                                .filter(p => p === 1 || p === pagination.totalPages || Math.abs(p - currentPage) <= 1)
-                                .map((p, i, arr) => (
-                                    <div key={p} className="flex items-center gap-1.5">
-                                        {i > 0 && arr[i - 1] !== p - 1 && <span className="text-muted-foreground font-black px-1 opacity-50">.</span>}
-                                        <Button
-                                            variant={currentPage === p ? "default" : "outline"}
-                                            size="icon"
-                                            className={`h-10 w-10 rounded-xl font-black text-xs transition-all ${currentPage === p ? 'shadow-lg shadow-primary/25' : ''}`}
-                                            onClick={() => setCurrentPage(p)}
-                                        >
-                                            {p}
-                                        </Button>
-                                    </div>
-                                ))
-                            }
+                            <div className="flex items-center gap-1.5">
+                                {Array.from({ length: pagination.totalPages }, (_, i) => i + 1)
+                                    .filter(p => p === 1 || p === pagination.totalPages || Math.abs(p - currentPage) <= 1)
+                                    .map((p, i, arr) => (
+                                        <div key={p} className="flex items-center gap-1.5">
+                                            {i > 0 && arr[i - 1] !== p - 1 && <span className="text-muted-foreground font-black px-1 opacity-50">.</span>}
+                                            <Button
+                                                variant={currentPage === p ? "default" : "outline"}
+                                                size="icon"
+                                                className={`h-10 w-10 rounded-xl font-black text-xs transition-all ${currentPage === p ? 'shadow-lg shadow-primary/25' : ''}`}
+                                                onClick={() => setCurrentPage(p)}
+                                            >
+                                                {p}
+                                            </Button>
+                                        </div>
+                                    ))
+                                }
+                            </div>
+
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={currentPage === pagination.totalPages}
+                                onClick={() => setCurrentPage(prev => prev + 1)}
+                                className="rounded-xl px-4 h-10 font-bold text-xs"
+                            >
+                                Next <ChevronRight className="h-4 w-4 ml-1.5" />
+                            </Button>
                         </div>
-
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            disabled={currentPage === pagination.totalPages}
-                            onClick={() => setCurrentPage(prev => prev + 1)}
-                            className="rounded-xl px-4 h-10 font-bold text-xs"
-                        >
-                            Next <ChevronRight className="h-4 w-4 ml-1.5" />
-                        </Button>
                     </div>
-                </div>
-            )}
+                )
+            }
 
             {/* SMART CONTACT UPDATE DIALOG */}
             <Dialog open={isUpdateModalOpen} onOpenChange={setIsUpdateModalOpen}>
@@ -1043,93 +972,95 @@ export default function AudioReviewPage() {
             </Dialog>
 
             {/* STICKY AUDIO PLAYER */}
-            {currentTrack && (
-                <div className="fixed bottom-4 sm:bottom-6 left-1/2 -translate-x-1/2 z-50 w-full max-w-4xl px-3 sm:px-4 animate-in slide-in-from-bottom-8 duration-500">
-                    <div className="bg-background/95 backdrop-blur-xl border shadow-2xl rounded-3xl p-3 sm:p-4 flex items-center gap-4 sm:gap-8 border-primary/20">
-                        {/* Track Info */}
-                        <div className="min-w-0 max-w-[120px] sm:max-w-[200px] hidden xs:block">
-                            <h4 className="font-black text-xs sm:text-sm truncate uppercase tracking-tight">{currentTrack.title}</h4>
-                            <p className="text-[9px] sm:text-[10px] text-muted-foreground font-bold truncate opacity-60">{currentTrack.subtitle}</p>
-                        </div>
-
-                        {/* Controls & Progress */}
-                        <div className="flex-1 flex flex-col items-center gap-1.5">
-                            <div className="flex items-center gap-6">
-                                <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-primary/10 hover:text-primary rounded-full" onClick={() => { if (audioRef.current) audioRef.current.currentTime -= 10 }}>
-                                    <SkipBack className="h-5 w-5" />
-                                </Button>
-
-                                <Button
-                                    className="h-12 w-12 rounded-full shadow-2xl bg-primary hover:scale-110 active:scale-95 transition-all"
-                                    onClick={() => setIsPlaying(!isPlaying)}
-                                >
-                                    {isPlaying ? <Pause className="h-6 w-6 fill-current" /> : <Play className="h-6 w-6 fill-current pl-1" />}
-                                </Button>
-
-                                <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-primary/10 hover:text-primary rounded-full" onClick={() => { if (audioRef.current) audioRef.current.currentTime += 10 }}>
-                                    <SkipForward className="h-5 w-5" />
-                                </Button>
+            {
+                currentTrack && (
+                    <div className="fixed bottom-4 sm:bottom-6 left-1/2 -translate-x-1/2 z-50 w-full max-w-4xl px-3 sm:px-4 animate-in slide-in-from-bottom-8 duration-500">
+                        <div className="bg-background/95 backdrop-blur-xl border shadow-2xl rounded-3xl p-3 sm:p-4 flex items-center gap-4 sm:gap-8 border-primary/20">
+                            {/* Track Info */}
+                            <div className="min-w-0 max-w-[120px] sm:max-w-[200px] hidden xs:block">
+                                <h4 className="font-black text-xs sm:text-sm truncate uppercase tracking-tight">{currentTrack.title}</h4>
+                                <p className="text-[9px] sm:text-[10px] text-muted-foreground font-bold truncate opacity-60">{currentTrack.subtitle}</p>
                             </div>
 
-                            <div className="w-full flex items-center gap-3 text-[10px] font-black tabular-nums text-muted-foreground">
-                                <span className="w-8">{formatTime(progress)}</span>
-                                <div className="relative flex-1 h-6 flex items-center">
-                                    {/* Hotspot Markers Overlay */}
-                                    {duration && interactions.find(i => i.id === currentTrack.id)?.structuredSnapshot?.hotspots?.map((hs: any, idx: number) => {
-                                        const left = (hs.start / duration) * 100;
-                                        const width = ((hs.end - hs.start) / duration) * 100;
-                                        return (
-                                            <div
-                                                key={idx}
-                                                className="absolute h-3 bg-yellow-400/80 rounded-full z-0 shadow-[0_0_12px_rgba(250,204,21,0.6)]"
-                                                style={{ left: `${left}%`, width: `${Math.max(width, 0.8)}%` }}
-                                            />
-                                        );
-                                    })}
+                            {/* Controls & Progress */}
+                            <div className="flex-1 flex flex-col items-center gap-1.5">
+                                <div className="flex items-center gap-6">
+                                    <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-primary/10 hover:text-primary rounded-full" onClick={() => { if (audioRef.current) audioRef.current.currentTime -= 10 }}>
+                                        <SkipBack className="h-5 w-5" />
+                                    </Button>
 
+                                    <Button
+                                        className="h-12 w-12 rounded-full shadow-2xl bg-primary hover:scale-110 active:scale-95 transition-all"
+                                        onClick={() => setIsPlaying(!isPlaying)}
+                                    >
+                                        {isPlaying ? <Pause className="h-6 w-6 fill-current" /> : <Play className="h-6 w-6 fill-current pl-1" />}
+                                    </Button>
+
+                                    <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-primary/10 hover:text-primary rounded-full" onClick={() => { if (audioRef.current) audioRef.current.currentTime += 10 }}>
+                                        <SkipForward className="h-5 w-5" />
+                                    </Button>
+                                </div>
+
+                                <div className="w-full flex items-center gap-3 text-[10px] font-black tabular-nums text-muted-foreground">
+                                    <span className="w-8">{formatTime(progress)}</span>
+                                    <div className="relative flex-1 h-6 flex items-center">
+                                        {/* Hotspot Markers Overlay */}
+                                        {duration && interactions.find(i => i.id === currentTrack.id)?.structuredSnapshot?.hotspots?.map((hs: any, idx: number) => {
+                                            const left = (hs.start / duration) * 100;
+                                            const width = ((hs.end - hs.start) / duration) * 100;
+                                            return (
+                                                <div
+                                                    key={idx}
+                                                    className="absolute h-3 bg-yellow-400/80 rounded-full z-0 shadow-[0_0_12px_rgba(250,204,21,0.6)]"
+                                                    style={{ left: `${left}%`, width: `${Math.max(width, 0.8)}%` }}
+                                                />
+                                            );
+                                        })}
+
+                                        <Slider
+                                            value={[progress]}
+                                            max={duration || 100}
+                                            step={0.1}
+                                            onValueChange={(vals) => {
+                                                if (audioRef.current) {
+                                                    audioRef.current.currentTime = vals[0];
+                                                    setProgress(vals[0]);
+                                                }
+                                            }}
+                                            className="relative z-10 flex-1"
+                                        />
+                                    </div>
+                                    <span className="w-8 text-right">{formatTime(duration)}</span>
+                                </div>
+                            </div>
+
+                            {/* Volume & Close */}
+                            <div className="flex items-center gap-2 sm:gap-4 shrink-0">
+                                <div className="hidden lg:flex items-center gap-2 group">
+                                    <button onClick={() => setIsMuted(!isMuted)} className="text-muted-foreground hover:text-primary transition-colors">
+                                        {isMuted || volume === 0 ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
+                                    </button>
                                     <Slider
-                                        value={[progress]}
-                                        max={duration || 100}
-                                        step={0.1}
-                                        onValueChange={(vals) => {
-                                            if (audioRef.current) {
-                                                audioRef.current.currentTime = vals[0];
-                                                setProgress(vals[0]);
-                                            }
-                                        }}
-                                        className="relative z-10 flex-1"
+                                        value={[isMuted ? 0 : volume]}
+                                        max={1}
+                                        step={0.01}
+                                        onValueChange={(vals) => setVolume(vals[0])}
+                                        className="w-20 hidden group-hover:block animate-in fade-in slide-in-from-right-2"
                                     />
                                 </div>
-                                <span className="w-8 text-right">{formatTime(duration)}</span>
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-9 w-9 sm:h-10 sm:w-10 text-muted-foreground hover:text-destructive rounded-full hover:bg-destructive/10"
+                                    onClick={() => { setIsPlaying(false); setCurrentTrack(null); }}
+                                >
+                                    <X className="h-5 w-5 sm:h-6 sm:w-6" />
+                                </Button>
                             </div>
-                        </div>
-
-                        {/* Volume & Close */}
-                        <div className="flex items-center gap-2 sm:gap-4 shrink-0">
-                            <div className="hidden lg:flex items-center gap-2 group">
-                                <button onClick={() => setIsMuted(!isMuted)} className="text-muted-foreground hover:text-primary transition-colors">
-                                    {isMuted || volume === 0 ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
-                                </button>
-                                <Slider
-                                    value={[isMuted ? 0 : volume]}
-                                    max={1}
-                                    step={0.01}
-                                    onValueChange={(vals) => setVolume(vals[0])}
-                                    className="w-20 hidden group-hover:block animate-in fade-in slide-in-from-right-2"
-                                />
-                            </div>
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-9 w-9 sm:h-10 sm:w-10 text-muted-foreground hover:text-destructive rounded-full hover:bg-destructive/10"
-                                onClick={() => { setIsPlaying(false); setCurrentTrack(null); }}
-                            >
-                                <X className="h-5 w-5 sm:h-6 sm:w-6" />
-                            </Button>
                         </div>
                     </div>
-                </div>
-            )}
-        </div>
+                )
+            }
+        </div >
     );
 }

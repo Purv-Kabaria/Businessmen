@@ -172,19 +172,25 @@ export default function FieldPage() {
   async function saveContactToApi(values: StallLeadFormValues) {
     const device_id = getDeviceId();
 
-    const contactRes = await fetch("/api/contacts", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({
-        name: values.name.trim(),
-        phone: values.phone,
-        email: values.email?.trim() || "",
-        intentTags: values.intent_tags,
-        sourceMode: "field",
-        deviceId: device_id,
-      }),
-    });
+    let contactRes: Response;
+    try {
+      contactRes = await fetch("/api/contacts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          name: values.name.trim(),
+          phone: values.phone,
+          email: values.email?.trim() || "",
+          intentTags: values.intent_tags,
+          sourceMode: "field",
+          deviceId: device_id,
+        }),
+      });
+    } catch (err) {
+      const isNetworkError = err instanceof TypeError && (err.message === "Failed to fetch" || err.message?.includes("fetch"));
+      throw new Error(isNetworkError ? "Cannot reach server. Check your connection and that the app is running." : (err instanceof Error ? err.message : "Request failed."));
+    }
 
     const contactJson = await contactRes.json().catch(() => ({}));
     if (!contactRes.ok) {
@@ -202,26 +208,29 @@ export default function FieldPage() {
       formData.append("audio_file", audioBlob, "recording.webm");
       formData.append("tags", JSON.stringify({ source: "field-capture" }));
 
-      const interactionRes = await fetch("/api/interactions", {
-        method: "POST",
-        credentials: "include",
-        body: formData,
-      });
-
-      if (!interactionRes.ok) {
-        let msg = "audio upload failed";
-        try {
-          const interactionJson = await interactionRes.json();
-          msg = (interactionJson?.error?.message ?? interactionJson?.message ?? msg) as string;
-        } catch {
-          msg = interactionRes.status === 503 ? "storage unavailable (check MinIO)" : "audio upload failed";
+      try {
+        const interactionRes = await fetch("/api/interactions", {
+          method: "POST",
+          credentials: "include",
+          body: formData,
+        });
+        if (!interactionRes.ok) {
+          let msg = "audio upload failed";
+          try {
+            const interactionJson = await interactionRes.json();
+            msg = (interactionJson?.error?.message ?? interactionJson?.message ?? msg) as string;
+          } catch {
+            msg = interactionRes.status === 503 ? "storage unavailable (check MinIO)" : "audio upload failed";
+          }
+          console.warn("Audio interaction upload failed:", msg);
+          toast.error(`Contact saved, but ${msg.toLowerCase()}.`);
         }
-        console.warn("Audio interaction upload failed:", msg);
-        toast.error(`Contact saved, but ${msg.toLowerCase()}.`);
+      } catch (err) {
+        const isNetworkError = err instanceof TypeError && (err.message === "Failed to fetch" || (err as Error).message?.includes("fetch"));
+        toast.error(isNetworkError ? "Contact saved, but could not reach server to upload audio." : "Contact saved, but audio upload failed.");
       }
     }
 
-    // Cleanup
     clearDraft("field").catch(() => { });
     form.reset({ name: "", phone: "", email: "", intent_tags: [] });
     clearRecording();

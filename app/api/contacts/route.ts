@@ -6,15 +6,15 @@ import {
     verifySession,
     handlePrismaError,
 } from "@/lib/api-utils";
+import { normalizePhone } from "@/modules/capture/utils";
 import { z } from "zod";
 
 const contactSchema = z.object({
     name: z.string().optional(),
     email: z.string().email().optional().or(z.literal("")),
     phone: z.string().min(10, "Phone number must be at least 10 digits"),
-    // New fields
     company: z.string().optional(),
-    intentTags: z.any().optional(), // Flexible JSON
+    intentTags: z.any().optional(),
     sourceMode: z.string().default("manual"),
     eventId: z.string().optional(),
     deviceId: z.string().optional(),
@@ -34,30 +34,28 @@ export async function POST(req: Request) {
         }
 
         const { name, email, phone, company, intentTags, sourceMode, eventId, deviceId } = validation.data;
-        const { id } = body; // Might be provided by offline client
+        const { id } = body;
+        const normalizedPhone = normalizePhone(phone);
 
-        // Deterministic identity: Upsert by phone number
         const contact = await prisma.contact.upsert({
-            where: { phone },
+            where: { phone: normalizedPhone },
             update: {
-                name: name || undefined, // Only update if provided
-                email: email || undefined,
-                company: company || undefined,
-                intentTags: intentTags || undefined,
-                // Don't update source info on existing contacts typically, or maybe update if provided?
-                // For now, let's keep sourceMode/eventId/deviceId immutable or update if needed.
+                name: name ?? undefined,
+                email: email ?? undefined,
+                company: company ?? undefined,
+                intentTags: intentTags ?? undefined,
             },
             create: {
-                id: id || undefined, // Use client ID if provided, otherwise auto-generate
+                id: id || undefined,
                 name: name || "Unknown",
                 email: email || null,
-                phone,
+                phone: normalizedPhone,
                 company,
-                intentTags: intentTags || undefined,
+                intentTags: intentTags ?? undefined,
                 sourceMode,
                 eventId,
                 deviceId,
-                pendingSync: false, // Server side creates are synced by definition
+                pendingSync: false,
             },
         });
 
@@ -75,8 +73,9 @@ export async function GET(req: Request) {
         const phone = searchParams.get("phone");
 
         if (phone) {
+            const normalizedPhone = normalizePhone(phone);
             const contact = await prisma.contact.findUnique({
-                where: { phone },
+                where: { phone: normalizedPhone },
                 include: {
                     interactions: {
                         orderBy: { createdAt: "desc" }, // Prisma uses property name, not DB map name
@@ -92,10 +91,12 @@ export async function GET(req: Request) {
             return createSuccessResponse(contact);
         }
 
-        // Default: List contacts
         const contacts = await prisma.contact.findMany({
-            orderBy: { updatedAt: "desc" }, // Prisma uses property name
+            orderBy: { updatedAt: "desc" },
             take: 50,
+            include: {
+                _count: { select: { interactions: true } },
+            },
         });
 
         return createSuccessResponse(contacts);
