@@ -546,7 +546,6 @@ export default function AudioReviewPage() {
                                             </Button>
                                         </div>
                                     </div>
-                                </div>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-6 mt-6">
                                         {/* Contact Details */}
                                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-muted/20 p-4 rounded-xl">
@@ -603,6 +602,7 @@ export default function AudioReviewPage() {
                                             )}
                                         </div>
                                     </div>
+                                </div>
 
                                     {/* Action Box */}
                                     <div className="space-y-4">
