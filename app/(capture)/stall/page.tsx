@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
+import { OrDivider } from "@/components/ui/or-divider";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { CardScanButton, type OCRResult } from "@/modules/capture/card-scan-button";
 import {
@@ -338,6 +339,7 @@ export default function StallPage() {
                         </p>
                       )}
                     </div>
+                    <OrDivider />
                     <motion.div
                       variants={container}
                       initial="hidden"

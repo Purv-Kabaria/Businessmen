@@ -5,8 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { AnimatePresence, motion } from "framer-motion";
-import Link from "next/link";
-import { Loader2, CheckCircle2, UserRound, Phone, Mail, Mic, MicOff, Square, Play, Trash2, ArrowLeft, Plus } from "lucide-react";
+import { Loader2, CheckCircle2, UserRound, Phone, Mail, Mic, Square, Play, Trash2, Plus } from "lucide-react";
 
 import { useMediaRecorder } from "@/hooks/use-media-recorder";
 
@@ -22,6 +21,13 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
   Form,
   FormControl,
   FormField,
@@ -30,7 +36,8 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Separator } from "@/components/ui/separator";
+import { OrDivider } from "@/components/ui/or-divider";
 import { CardScanButton } from "@/modules/capture/card-scan-button";
 import {
   Command,
@@ -370,78 +377,131 @@ export default function FieldPage() {
   }
 
   return (
-    <main className="flex min-h-screen flex-col bg-linear-to-b from-secondary/30 to-background">
-      <header className="sticky top-0 z-10 shrink-0 border-b border-border bg-background px-4 py-3">
-        <div className="flex items-center gap-3">
-          <Link
-            href="/"
-            className="inline-flex h-9 items-center gap-2 rounded-md border-2 border-primary/30 bg-background px-3 py-2 text-sm font-medium text-foreground shadow-sm hover:bg-primary/10 hover:border-primary/50"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Go to home
-          </Link>
-        </div>
-      </header>
-
+    <main className="flex min-h-dvh flex-col bg-linear-to-b from-secondary/40 to-background">
+      <div className="flex flex-1 flex-col items-center justify-center p-4 sm:p-6 overflow-auto">
+      <AlertDialog open={showDraftPrompt} onOpenChange={(open) => !open && handleDiscardDraft()}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Continue previous entry?</AlertDialogTitle>
+            <AlertDialogDescription>
+              You have an unsaved draft. Restore it or start fresh.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={handleDiscardDraft}>Discard</AlertDialogCancel>
+            <AlertDialogAction onClick={handleContinueDraft}>Continue</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog open={!!duplicateConfirmPending} onOpenChange={(open) => !open && setDuplicateConfirmPending(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Already in list</AlertDialogTitle>
+            <AlertDialogDescription>
+              This phone or email is already captured. Add anyway? (e.g. same office number)
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setDuplicateConfirmPending(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDuplicateAddAnyway}>Add anyway</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <AnimatePresence mode="wait">
         {showSuccess ? (
           <motion.div
             key="success"
-            initial={{ opacity: 0, scale: 0.98 }}
+            initial={{ opacity: 0, scale: 0.96 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.98 }}
             transition={{ type: "spring", stiffness: 400, damping: 30 }}
-            className="flex flex-1 flex-col items-center justify-center p-4"
+            className="w-full max-w-xl"
           >
-            <div className="rounded-xl border border-primary/20 bg-card p-8 text-center shadow-sm">
-              <CheckCircle2 className="mx-auto h-14 w-14 text-primary" />
-              <p className="mt-3 font-semibold">Saved</p>
-              <p className="mt-1 text-sm text-muted-foreground">We'll sync when you're back online.</p>
-            </div>
+            <Card className="overflow-hidden border-primary/20 shadow-lg shadow-primary/5">
+              <CardContent className="flex flex-col items-center justify-center py-16">
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  transition={{ type: "spring", stiffness: 300, damping: 20, delay: 0.1 }}
+                >
+                  <CheckCircle2 className="h-16 w-16 text-primary" />
+                </motion.div>
+                <motion.p
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.2 }}
+                  className="mt-4 text-xl font-semibold"
+                >
+                  Saved
+                </motion.p>
+                <motion.p
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.3 }}
+                  className="mt-1 text-sm text-muted-foreground"
+                >
+                  We&apos;ll sync when you&apos;re back online.
+                </motion.p>
+              </CardContent>
+            </Card>
           </motion.div>
         ) : (
           <motion.div
             key="form"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="flex flex-1 flex-col overflow-auto px-4 py-4"
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.3, ease: "easeOut" }}
+            className="w-full max-w-xl"
           >
-            <Form {...form}>
-              <form id="field-capture-form" onSubmit={form.handleSubmit(onSubmit)} className="mx-auto w-full max-w-xl space-y-4">
-                <div className="flex flex-col gap-2">
-                  <CardScanButton
-                    onCaptured={({ image, data }) => {
-                      const file = new File([image], "captured_card.jpg", { type: image.type });
-                      setCapturedCardImage(file);
+            <Card className="overflow-hidden border-border/80 shadow-xl">
+              <CardHeader className="space-y-1.5 pb-4 text-center">
+                <CardTitle className="text-2xl tracking-tight">
+                  Field capture
+                </CardTitle>
+                <CardDescription className="text-base">
+                  Capture lead details and a brief voice note from the conversation.
+                </CardDescription>
+              </CardHeader>
+              <Separator />
+              <CardContent className="pt-6">
+                <Form {...form}>
+                  <form id="field-capture-form" onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                    <div className="flex flex-col gap-2">
+                      <CardScanButton
+                        onCaptured={({ image, data }) => {
+                          const file = new File([image], "captured_card.jpg", { type: image.type });
+                          setCapturedCardImage(file);
 
-                      if (data.name) form.setValue("name", data.name);
-                      if (data.phone) form.setValue("phone", data.phone);
-                      if (data.email) form.setValue("email", data.email);
+                          if (data.name) form.setValue("name", data.name);
+                          if (data.phone) form.setValue("phone", data.phone);
+                          if (data.email) form.setValue("email", data.email);
 
-                      toast.success("Card data extracted!");
-                    }}
-                    variant="outline"
-                    size="sm"
-                    className="w-full"
-                  />
-                  {capturedCardImage && (
-                    <p className="text-xs text-muted-foreground">
-                      Card image attached.
-                    </p>
-                  )}
-                </div>
-                <FormField
+                          toast.success("Card data extracted!");
+                        }}
+                        variant="outline"
+                        size="lg"
+                        className="w-full"
+                      />
+                      {capturedCardImage && (
+                        <p className="text-xs text-muted-foreground">
+                          Card image attached.
+                        </p>
+                      )}
+                    </div>
+                    <OrDivider />
+                    <div className="space-y-5">
+                      <FormField
                   control={form.control}
                   name="name"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="flex items-center gap-2 text-sm">
-                        <UserRound className="h-3.5 w-3.5 text-muted-foreground" />
+                      <FormLabel className="flex items-center gap-2 text-sm font-medium">
+                        <UserRound className="h-4 w-4 text-muted-foreground" />
                         Name
                       </FormLabel>
                       <FormControl>
-                        <Input placeholder="Full name" className="h-10 text-base" {...field} />
+                        <Input placeholder="Full name" className="h-11 text-base" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -452,12 +512,12 @@ export default function FieldPage() {
                   name="phone"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="flex items-center gap-2 text-sm">
-                        <Phone className="h-3.5 w-3.5 text-muted-foreground" />
+                      <FormLabel className="flex items-center gap-2 text-sm font-medium">
+                        <Phone className="h-4 w-4 text-muted-foreground" />
                         Phone
                       </FormLabel>
                       <FormControl>
-                        <Input type="tel" placeholder="Phone number" className="h-10 text-base" {...field} />
+                        <Input type="tel" placeholder="Phone number" className="h-11 text-base" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -468,13 +528,13 @@ export default function FieldPage() {
                   name="email"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="flex items-center gap-2 text-sm">
-                        <Mail className="h-3.5 w-3.5 text-muted-foreground" />
+                      <FormLabel className="flex items-center gap-2 text-sm font-medium">
+                        <Mail className="h-4 w-4 text-muted-foreground" />
                         Email
-                        <span className="font-normal text-muted-foreground">(optional)</span>
+                        <span className="text-muted-foreground font-normal">(optional)</span>
                       </FormLabel>
                       <FormControl>
-                        <Input type="email" placeholder="Email" className="h-10 text-base" {...field} />
+                        <Input type="email" placeholder="Email" className="h-11 text-base" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -485,7 +545,7 @@ export default function FieldPage() {
                   name="intent_tags"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-sm">Interest</FormLabel>
+                      <FormLabel className="text-sm font-medium">I am interested in</FormLabel>
                       <FormControl>
                         <Popover>
                           <PopoverTrigger asChild>
@@ -592,36 +652,38 @@ export default function FieldPage() {
                     </FormItem>
                   )}
                 />
-                <div className="pt-4 border-t border-primary/10">
-                  <div className="flex items-center justify-between mb-4">
-                    <div>
-                      <h4 className="text-sm font-black flex items-center gap-2 uppercase tracking-tight">
-                        <Mic className="h-4 w-4 text-primary" />
-                        Interaction Voice Note
-                        <span className="text-[9px] bg-primary text-white px-2 py-0.5 rounded-full font-bold">REQUIRED</span>
-                      </h4>
-                      <p className="text-xs text-muted-foreground">Summarize the conversation briefly.</p>
                     </div>
-                    {audioBlob && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="h-8 text-[10px] font-bold uppercase text-muted-foreground hover:text-destructive transition-colors"
-                        onClick={clearRecordingAndDraft}
-                      >
-                        <Trash2 className="h-3 w-3 mr-1" /> Re-record
-                      </Button>
-                    )}
-                  </div>
+                    <Separator className="my-6" />
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h4 className="text-sm font-semibold flex items-center gap-2">
+                            <Mic className="h-4 w-4 text-primary" />
+                            Voice note
+                            <span className="text-[10px] bg-primary text-primary-foreground px-2 py-0.5 rounded-full font-medium">Required</span>
+                          </h4>
+                          <p className="text-xs text-muted-foreground">Summarize the conversation briefly.</p>
+                        </div>
+                        {audioBlob && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 text-xs text-muted-foreground hover:text-destructive"
+                            onClick={clearRecordingAndDraft}
+                          >
+                            <Trash2 className="h-3 w-3 mr-1" /> Re-record
+                          </Button>
+                        )}
+                      </div>
 
-                  <div className={cn(
-                    "relative overflow-hidden rounded-3xl border-2 transition-all duration-500",
-                    audioBlob ? "border-primary/30 bg-primary/5 shadow-inner" : "border-dashed border-muted-foreground/20 bg-muted/5",
-                    isRecording && "border-primary ring-8 ring-primary/5 shadow-lg"
-                  )}>
-                    <div className="flex items-center justify-between p-6">
-                      <div className="flex items-center gap-5">
+                      <div className={cn(
+                        "relative overflow-hidden rounded-2xl border-2 transition-all duration-300",
+                        audioBlob ? "border-primary/30 bg-primary/5 shadow-inner" : "border-dashed border-border bg-muted/5",
+                        isRecording && "border-primary ring-4 ring-primary/10"
+                      )}>
+                        <div className="flex items-center justify-between p-6">
+                          <div className="flex items-center gap-5">
                         <div className="relative">
                           {isRecording && (
                             <motion.div
@@ -688,58 +750,29 @@ export default function FieldPage() {
                           ))}
                         </div>
                       )}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </div>
-              </form>
-            </Form>
+                    <Button
+                      type="submit"
+                      className="h-12 w-full text-base font-medium mt-6"
+                      size="lg"
+                      disabled={isSubmitting}
+                    >
+                      {isSubmitting ? (
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                      ) : (
+                        "Save"
+                      )}
+                    </Button>
+                  </form>
+                </Form>
+              </CardContent>
+            </Card>
           </motion.div>
         )}
       </AnimatePresence>
-
-      {!showSuccess && (
-        <footer className="sticky bottom-0 z-10 shrink-0 border-t border-border/60 bg-background px-4 py-3">
-          <div className="mx-auto max-w-xl">
-            <Button
-              type="submit"
-              form="field-capture-form"
-              className="h-11 w-full font-medium"
-              disabled={isSubmitting}
-            >
-              {isSubmitting ? <Loader2 className="h-5 w-5 animate-spin" /> : "Save"}
-            </Button>
-          </div>
-        </footer>
-      )}
-
-      <AlertDialog open={showDraftPrompt} onOpenChange={(open) => !open && handleDiscardDraft()}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Continue previous entry?</AlertDialogTitle>
-            <AlertDialogDescription>
-              You have an unsaved draft. Restore it or start fresh.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={handleDiscardDraft}>Discard</AlertDialogCancel>
-            <AlertDialogAction onClick={handleContinueDraft}>Continue</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-      <AlertDialog open={!!duplicateConfirmPending} onOpenChange={(open) => !open && setDuplicateConfirmPending(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Already in list</AlertDialogTitle>
-            <AlertDialogDescription>
-              This phone or email is already captured. Add anyway? (e.g. same office number)
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setDuplicateConfirmPending(null)}>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDuplicateAddAnyway}>Add anyway</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      </div>
     </main>
   );
 }
