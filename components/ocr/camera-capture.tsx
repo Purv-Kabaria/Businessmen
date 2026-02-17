@@ -92,7 +92,8 @@ export function CameraCapture({ onCapture, onClose }: CameraCaptureProps) {
 
             if (result.success && result.data) {
                 toast.success("Card scanned successfully!");
-                onCapture(result.data);
+                // Pass both the image blob and the OCR data
+                onCapture({ image: blob, data: result.data });
             } else {
                 throw new Error("Invalid response format");
             }

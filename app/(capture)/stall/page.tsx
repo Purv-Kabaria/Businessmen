@@ -5,7 +5,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { AnimatePresence, motion } from "framer-motion";
-import { Loader2, CheckCircle2, UserRound, Phone, Mail } from "lucide-react";
 
 import {
   AlertDialog,
@@ -36,7 +35,23 @@ import {
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { CardScanButton } from "@/modules/capture/card-scan-button";
+import { CardScanButton, type OCRResult } from "@/modules/capture/card-scan-button";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
+import { Loader2, CheckCircle2, UserRound, Phone, Mail, Check, ChevronsUpDown, X } from "lucide-react";
 import { STALL_INTENTS } from "@/modules/capture/constants";
 import { addContact, clearDraft, getDeviceId, getDraft, setDraft, type DraftData } from "@/modules/capture/db";
 import { hasLocalDuplicate } from "@/modules/capture/local-duplicate";
@@ -119,7 +134,7 @@ export default function StallPage() {
           email: email.trim() || undefined,
           intent_tags,
           updated_at: 0,
-        }).catch(() => {});
+        }).catch(() => { });
         draftTimerRef.current = null;
       }, DRAFT_DEBOUNCE_MS);
     });
@@ -132,14 +147,14 @@ export default function StallPage() {
   function handleContinueDraft() {
     if (pendingDraft) {
       form.reset(draftToFormValues(pendingDraft));
-      clearDraft("stall").catch(() => {});
+      clearDraft("stall").catch(() => { });
     }
     setPendingDraft(null);
     setShowDraftPrompt(false);
   }
 
   function handleDiscardDraft() {
-    clearDraft("stall").catch(() => {});
+    clearDraft("stall").catch(() => { });
     setPendingDraft(null);
     setShowDraftPrompt(false);
   }
@@ -163,7 +178,7 @@ export default function StallPage() {
       updated_at: now,
       event_id: null,
     });
-    clearDraft("stall").catch(() => {});
+    clearDraft("stall").catch(() => { });
     form.reset({ name: "", phone: "", email: "", intent_tags: [] });
     setCapturedCardImage(null);
     setShowSuccess(true);
@@ -302,9 +317,15 @@ export default function StallPage() {
                   >
                     <div className="flex flex-col gap-2">
                       <CardScanButton
-                        onCaptured={(file) => {
+                        onCaptured={({ image, data }) => {
+                          const file = new File([image], "captured_card.jpg", { type: image.type });
                           setCapturedCardImage(file);
-                          toast.success("Card image captured. Enter details below or we'll use it when OCR is ready.");
+
+                          if (data.name) form.setValue("name", data.name);
+                          if (data.phone) form.setValue("phone", data.phone);
+                          if (data.email) form.setValue("email", data.email);
+
+                          toast.success("Card data extracted!");
                         }}
                         variant="outline"
                         size="lg"
@@ -312,7 +333,7 @@ export default function StallPage() {
                       />
                       {capturedCardImage && (
                         <p className="text-xs text-muted-foreground">
-                          Card image attached. You can fill the form manually or wait for OCR (coming soon).
+                          Card image attached.
                         </p>
                       )}
                     </div>
@@ -404,24 +425,61 @@ export default function StallPage() {
                                 I am interested in
                               </FormLabel>
                               <FormControl>
-                                <ToggleGroup
-                                  type="multiple"
-                                  value={field.value}
-                                  onValueChange={field.onChange}
-                                  variant="outline"
-                                  size="lg"
-                                  className="grid w-full grid-cols-2 gap-2"
-                                >
-                                  {STALL_INTENTS.map((intent) => (
-                                    <ToggleGroupItem
-                                      key={intent}
-                                      value={intent}
-                                      className="min-h-12 rounded-lg text-left text-sm data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+                                <Popover>
+                                  <PopoverTrigger asChild>
+                                    <Button
+                                      variant="outline"
+                                      role="combobox"
+                                      className="w-full justify-between h-auto min-h-12 py-2"
                                     >
-                                      {intent}
-                                    </ToggleGroupItem>
-                                  ))}
-                                </ToggleGroup>
+                                      {field.value && field.value.length > 0 ? (
+                                        <div className="flex flex-wrap gap-1">
+                                          {field.value.map((tag) => (
+                                            <Badge variant="secondary" key={tag} className="mr-1">
+                                              {tag}
+                                            </Badge>
+                                          ))}
+                                        </div>
+                                      ) : (
+                                        <span className="text-muted-foreground">Select interests...</span>
+                                      )}
+                                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                    </Button>
+                                  </PopoverTrigger>
+                                  <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
+                                    <Command>
+                                      <CommandInput placeholder="Search intent..." />
+                                      <CommandList>
+                                        <CommandEmpty>No intent found.</CommandEmpty>
+                                        <CommandGroup>
+                                          {STALL_INTENTS.map((intent) => (
+                                            <CommandItem
+                                              value={intent}
+                                              key={intent}
+                                              onSelect={() => {
+                                                const current = field.value || [];
+                                                const updated = current.includes(intent)
+                                                  ? current.filter((v) => v !== intent)
+                                                  : [...current, intent];
+                                                field.onChange(updated);
+                                              }}
+                                            >
+                                              <Check
+                                                className={cn(
+                                                  "mr-2 h-4 w-4",
+                                                  field.value?.includes(intent)
+                                                    ? "opacity-100"
+                                                    : "opacity-0"
+                                                )}
+                                              />
+                                              {intent}
+                                            </CommandItem>
+                                          ))}
+                                        </CommandGroup>
+                                      </CommandList>
+                                    </Command>
+                                  </PopoverContent>
+                                </Popover>
                               </FormControl>
                               <FormMessage />
                             </FormItem>

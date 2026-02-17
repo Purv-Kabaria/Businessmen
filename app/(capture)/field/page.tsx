@@ -32,6 +32,22 @@ import {
 import { Input } from "@/components/ui/input";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { CardScanButton } from "@/modules/capture/card-scan-button";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Badge } from "@/components/ui/badge";
+import { Check, ChevronsUpDown, X } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { STALL_INTENTS } from "@/modules/capture/constants";
 import { addContact, clearDraft, getDeviceId, getDraft, setDraft, type DraftData } from "@/modules/capture/db";
 import { hasLocalDuplicate } from "@/modules/capture/local-duplicate";
@@ -274,9 +290,15 @@ export default function FieldPage() {
               <form id="field-capture-form" onSubmit={form.handleSubmit(onSubmit)} className="mx-auto w-full max-w-xl space-y-4">
                 <div className="flex flex-col gap-2">
                   <CardScanButton
-                    onCaptured={(file) => {
+                    onCaptured={({ image, data }) => {
+                      const file = new File([image], "captured_card.jpg", { type: image.type });
                       setCapturedCardImage(file);
-                      toast.success("Card image captured. Enter details or we'll use it when OCR is ready.");
+
+                      if (data.name) form.setValue("name", data.name);
+                      if (data.phone) form.setValue("phone", data.phone);
+                      if (data.email) form.setValue("email", data.email);
+
+                      toast.success("Card data extracted!");
                     }}
                     variant="outline"
                     size="sm"
@@ -344,24 +366,61 @@ export default function FieldPage() {
                     <FormItem>
                       <FormLabel className="text-sm">Interest</FormLabel>
                       <FormControl>
-                        <ToggleGroup
-                          type="multiple"
-                          value={field.value}
-                          onValueChange={field.onChange}
-                          variant="outline"
-                          size="default"
-                          className="grid w-full grid-cols-2 gap-2"
-                        >
-                          {STALL_INTENTS.map((intent) => (
-                            <ToggleGroupItem
-                              key={intent}
-                              value={intent}
-                              className="min-h-10 rounded-lg text-left text-sm data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              role="combobox"
+                              className="w-full justify-between h-auto min-h-12 py-2"
                             >
-                              {intent}
-                            </ToggleGroupItem>
-                          ))}
-                        </ToggleGroup>
+                              {field.value && field.value.length > 0 ? (
+                                <div className="flex flex-wrap gap-1">
+                                  {field.value.map((tag) => (
+                                    <Badge variant="secondary" key={tag} className="mr-1">
+                                      {tag}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              ) : (
+                                <span className="text-muted-foreground">Select interests...</span>
+                              )}
+                              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
+                            <Command>
+                              <CommandInput placeholder="Search intent..." />
+                              <CommandList>
+                                <CommandEmpty>No intent found.</CommandEmpty>
+                                <CommandGroup>
+                                  {STALL_INTENTS.map((intent) => (
+                                    <CommandItem
+                                      value={intent}
+                                      key={intent}
+                                      onSelect={() => {
+                                        const current = field.value || [];
+                                        const updated = current.includes(intent)
+                                          ? current.filter((v) => v !== intent)
+                                          : [...current, intent];
+                                        field.onChange(updated);
+                                      }}
+                                    >
+                                      <Check
+                                        className={cn(
+                                          "mr-2 h-4 w-4",
+                                          field.value?.includes(intent)
+                                            ? "opacity-100"
+                                            : "opacity-0"
+                                        )}
+                                      />
+                                      {intent}
+                                    </CommandItem>
+                                  ))}
+                                </CommandGroup>
+                              </CommandList>
+                            </Command>
+                          </PopoverContent>
+                        </Popover>
                       </FormControl>
                       <FormMessage />
                     </FormItem>
