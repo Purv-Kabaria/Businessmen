@@ -113,7 +113,7 @@ export function CTA() {
             <div className="relative bg-background/90 backdrop-blur-md rounded-2xl shadow-2xl p-6 max-w-md mx-auto border border-border">
               <div className="flex items-center justify-between mb-4">
                 <h4 className="font-serif font-semibold text-foreground">
-                  {dashboard.title} • {dashboard.patientName}
+                  {dashboard.title} • {dashboard.contactName}
                 </h4>
                 <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
                   <Users className="h-4 w-4 text-primary" />

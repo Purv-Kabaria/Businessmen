@@ -5,8 +5,8 @@ import { Providers } from "@/components/providers";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Template",
-  description: "Template",
+  title: "FinBridge",
+  description: "FinBridge",
   icons: {
     icon: "/images/logo.svg",
   },

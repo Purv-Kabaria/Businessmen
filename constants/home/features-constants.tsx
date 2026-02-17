@@ -2,14 +2,14 @@
 
 import type { LucideIcon } from "lucide-react";
 import {
-  CalendarClock,
-  BellRing,
-  LineChart,
-  BarChart,
-  MessageSquareHeart,
-  ShieldCheck,
-  FileText,
+  Zap,
+  Fingerprint,
+  History,
+  Cpu,
+  ArrowRightCircle,
+  LayoutDashboard,
   Users,
+  ShieldCheck,
 } from "lucide-react";
 
 export type FeatureItem = {
@@ -20,58 +20,58 @@ export type FeatureItem = {
 
 export const FEATURES_CONTENT = {
   id: "features",
-  eyebrow: "Features",
-  title: "A Complete Toolkit for Placeholder",
+  eyebrow: "Core System",
+  title: "Built for Conference Continuity",
   description:
-    "Lorem ipsum dolor sit amet, consectetur adipisicing elit. Temporibus, officiis!",
+    "A unified toolkit designed to preserve conversational context and enforce follow-up discipline under any conditions.",
   items: [
     {
-      icon: CalendarClock,
-      title: "Placeholder",
+      icon: Zap,
+      title: "Offline-First Capture",
       description:
-        "Lorem ipsum dolor sit amet, consectetur adipisicing elit. Temporibus, officiis!",
+        "Data is saved locally to IndexedDB first. Capture never depends on a stable internet connection.",
     },
     {
-      icon: BellRing,
-      title: "Placeholder",
+      icon: Fingerprint,
+      title: "Deterministic Identity",
       description:
-        "Lorem ipsum dolor sit amet, consectetur adipisicing elit. Temporibus, officiis!",
+        "Identity resolved via unique phone numbers. No fuzzy matching or probabilistic deduplication.",
     },
     {
-      icon: LineChart,
-      title: "Placeholder",
+      icon: History,
+      title: "Immutable Timeline",
       description:
-        "Lorem ipsum dolor sit amet, consectetur adipisicing elit. Temporibus, officiis!",
+        "Append-only interaction memory. Never overwrite transcriptions or delete historical context.",
     },
     {
-      icon: BarChart,
-      title: "Placeholder",
+      icon: Cpu,
+      title: "AI Context Pipeline",
       description:
-        "Lorem ipsum dolor sit amet, consectetur adipisicing elit. Temporibus, officiis!",
+        "Asynchronous Whisper transcription and LLM structured snapshots to compress interaction context.",
     },
     {
-      icon: MessageSquareHeart,
-      title: "Placeholder",
+      icon: ArrowRightCircle,
+      title: "Follow-Up Engine",
       description:
-        "Lorem ipsum dolor sit amet, consectetur adipisicing elit. Temporibus, officiis!",
+        "Enforceable stage transitions. Follow-up dates are mandatory before moving beyond the initial meeting.",
     },
     {
-      icon: FileText,
-      title: "Placeholder",
+      icon: LayoutDashboard,
+      title: "Discipline Dashboard",
       description:
-        "Lorem ipsum dolor sit amet, consectetur adipisicing elit. Temporibus, officiis!",
-    },
-    {
-      icon: ShieldCheck,
-      title: "Placeholder",
-      description:
-        "Lorem ipsum dolor sit amet, consectetur adipisicing elit. Temporibus, officiis!",
+        "Track pending and overdue follow-ups per RM. Focus on operational discipline, not revenue.",
     },
     {
       icon: Users,
-      title: "Placeholder",
+      title: "Cross-Team Awareness",
       description:
-        "Lorem ipsum dolor sit amet, consectetur adipisicing elit. Temporibus, officiis!",
+        "Instant visibility into prior RM interactions with a contact to prevent duplicate conversations.",
+    },
+    {
+      icon: ShieldCheck,
+      title: "Secure Vault",
+      description:
+        "Private audio storage in MinIO and encrypted structured data in PostgreSQL for maximum security.",
     },
   ] as FeatureItem[],
 } as const;

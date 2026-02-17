@@ -36,7 +36,7 @@ export interface DashboardItem {
 
 export interface CTADashboard {
   title: string;
-  patientName: string;
+  contactName: string;
   items: DashboardItem[];
 }
 
@@ -50,62 +50,62 @@ export interface CTAConfig {
 
 export const ctaConfig: CTAConfig = {
   badge: {
-    text: "Placeholder",
+    text: "Conference Ready",
   },
   heading: {
-    title: "Placeholder",
+    title: "Preserve Continuity Everywhere",
     subtitle:
-      "Lorem ipsum dolor sit amet consectetur adipisicing elit. Cum, quos?",
+      "Maintain the thread of every conversation, from the booth to the field, without missing a single detail.",
   },
   features: [
     {
       icon: CalendarCheck,
-      title: "Placeholder",
-      description: "Lorem ipsum dolor sit amet consectetur adipisicing elit. Cum, quos?",
+      title: "Scheduled Follow-ups",
+      description: "Automated reminders ensure no lead ever goes stagnant after the conference.",
     },
     {
       icon: HeartPulse,
-      title: "Placeholder",
+      title: "Relationship Vitals",
       description:
-        "Lorem ipsum dolor sit amet consectetur adipisicing elit. Cum, quos?",
+        "AI-extracted snapshots provide critical context on risk sentiment and preferences.",
     },
   ],
   buttons: [
     {
-      text: "Placeholder",
-      href: "/signup",
+      text: "Start Capturing",
+      href: "/auth/signup",
       variant: "primary",
     },
     {
-      text: "Placeholder",
-      href: "/tour",
+      text: "View Dashboard",
+      href: "/dashboard",
       variant: "secondary",
     },
   ],
   dashboard: {
-    title: "Placeholder",
-    patientName: "Placeholder",
+    title: "Relationship Timeline",
+    contactName: "Rahul Sharma",
     items: [
       {
         icon: CalendarCheck,
-        title: "Placeholder",
-        time: "Placeholder",
+        title: "Initial Meeting",
+        time: "10:30 AM",
         content:
-          "Lorem ipsum dolor sit amet consectetur adipisicing elit. Cum, quos?",
+          "Interested in PMS. Concerned about local market volatility.",
       },
       {
         icon: BarChart,
-        title: "Placeholder",
-        time: "Placeholder",
+        title: "AI Snapshot",
+        time: "11:00 AM",
         content:
-          "Lorem ipsum dolor sit amet consectetur adipisicing elit. Cum, quos?",
+          "Sentiment: Cautious. Next Step: Send brochure via WhatsApp.",
       },
       {
         icon: Bell,
-        title: "Placeholder",
-        time: "Placeholder",
+        title: "Follow-up Set",
+        time: "11:15 AM",
         content:
-          "Lorem ipsum dolor sit amet consectetur adipisicing elit. Cum, quos?",
+          "Scheduled for Feb 24th by RM: Amit Varma.",
       },
     ],
   },

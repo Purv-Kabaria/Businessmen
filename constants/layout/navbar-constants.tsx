@@ -2,6 +2,8 @@
 
 import type { LucideIcon } from "lucide-react";
 import {
+  Store,
+  MapPin,
   LayoutDashboard,
 } from "lucide-react";
 
@@ -15,15 +17,17 @@ export const NAVBAR = {
   logo: {
     light: "/images/logo.svg",
     dark: "/images/logo.svg",
-    alt: "Placeholder Logo",
+    alt: "FinBridge Logo",
     width: 32,
     height: 32,
   },
   name: {
-    primary: "Place",
-    secondary: "Holder",
+    primary: "Fin",
+    secondary: "Bridge",
   },
   links: [
-    { href: "/placeholder", label: "Placeholder", icon: LayoutDashboard },
+    { href: "/stall", label: "Stall Mode", icon: Store },
+    { href: "/field", label: "Field Mode", icon: MapPin },
+    { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   ] as NavLink[],
 } as const;

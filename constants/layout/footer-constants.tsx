@@ -49,54 +49,55 @@ export interface FooterConfig {
 
 export const footerConfig: FooterConfig = {
   companyName: {
-    primary: "Place",
-    secondary: "Holder",
+    primary: "Fin",
+    secondary: "Bridge",
   },
   tagline:
-    "Lorem ipsum dolor sit amet consectetur adipisicing elit. Cum, quos?",
+    "Offline-first conference continuity and relationship memory systems.",
   socialLinks: [
     {
-      href: "https://facebook.com",
-      icon: Facebook,
-      label: "Facebook",
-    },
-    {
-      href: "https://twitter.com",
+      href: "https://twitter.com/finbridge",
       icon: Twitter,
       label: "Twitter",
     },
     {
-      href: "https://instagram.com",
-      icon: Instagram,
-      label: "Instagram",
-    },
-    {
-      href: "https://linkedin.com",
+      href: "https://linkedin.com/company/finbridge",
       icon: Linkedin,
       label: "LinkedIn",
     },
   ],
   sections: [
     {
-      title: "Placeholder1",
-      links: [{ href: "/placeholder1", label: "Placeholder1" }],
+      title: "Solutions",
+      links: [
+        { href: "/stall", label: "Stall Mode" },
+        { href: "/field", label: "Field Mode" },
+        { href: "/dashboard", label: "Discipline Dashboard" },
+      ],
     },
     {
-      title: "Placeholder2",
-      links: [{ href: "/placeholder2", label: "Placeholder2" }],
+      title: "Platform",
+      links: [
+        { href: "/about", label: "About Us" },
+        { href: "/security", label: "Security" },
+        { href: "/api", label: "API Docs" },
+      ],
     },
   ],
   contactInfo: {
     address: {
-      line1: "SVNIT",
-      line2: "Surat, Gujarat, India",
-      line3: "",
+      line1: "Business Hub",
+      line2: "Mumbai, Maharashtra",
+      line3: "India",
     },
-    email: "contact@placeholder.com",
-    phone: "+91 12345 67890",
+    email: "support@finbridge.io",
+    phone: "+91 98765 43210",
   },
   legal: {
-    copyrightText: "Placeholder. All rights reserved.",
-    links: [],
+    copyrightText: "FinBridge. All rights reserved.",
+    links: [
+      { href: "/privacy", label: "Privacy Policy" },
+      { href: "/terms", label: "Terms of Service" },
+    ],
   },
 };

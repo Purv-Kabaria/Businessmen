@@ -13,19 +13,19 @@ export const HERO_CONTENT = {
   id: "hero",
   headline: {
     primary: "FinBridge,",
-    secondary: "FinBridge",
+    secondary: "Offline-First Continuity",
   },
   description:
-    "Lorem ipsum dolor sit amet, consectetur adipisicing elit. Temporibus, officiis!",
+    "Built for investment advisory conferences. Ensure zero data loss, deterministic identity, and AI-powered relationship memory—even without internet.",
   ctas: {
-    primary: { href: "/placeholder", label: "Placeholder" },
-    secondary: { href: "/placeholder", label: "Placeholder" },
+    primary: { href: "/stall", label: "Open Stall Mode" },
+    secondary: { href: "/field", label: "Enter Field Mode" },
   },
   highlights: [
-    { icon: Users, title: "50+", description: "Placeholder" },
-    { icon: Calendar, title: "10K+", description: "Placeholder" },
-    { icon: Heart, title: "50%", description: "Placeholder" },
-    { icon: ShieldCheck, title: "100%", description: "Placeholder" },
+    { icon: ShieldCheck, title: "100%", description: "Offline Reliability" },
+    { icon: Users, title: "1-to-1", description: "Deterministic ID" },
+    { icon: Heart, title: "Append", description: "Immutable Memory" },
+    { icon: Calendar, title: "Sync", description: "Asynchronous Flow" },
   ] as HeroHighlight[],
 } as const;
 
