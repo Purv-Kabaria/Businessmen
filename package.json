@@ -15,6 +15,7 @@
     "prisma:studio:local": "dotenv -e .env.local.dev -- prisma studio",
     "export-table": "dotenv -- tsx scripts/export-table.ts",
     "import-table": "dotenv -- tsx scripts/import-table.ts",
+    "clear-db": "dotenv -- tsx scripts/clear-db.ts",
     "dev:shared": "dotenv -e .env.shared.dev -- next dev --turbo -p 3000",
     "dev:local": "dotenv -e .env.local.dev -- next dev --turbo -p 3001",
     "dev:both": "concurrently \"pnpm dev:shared\" \"pnpm dev:local\"",

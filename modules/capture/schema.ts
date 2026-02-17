@@ -21,7 +21,7 @@ export const stallLeadSchema = z.object({
     .transform((s) => (s === undefined || s === "" ? undefined : s.trim().toLowerCase()))
     .refine((s) => s === undefined || s === "" || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s), "Invalid email")
     .optional(),
-  intent_tags: z.array(z.enum(STALL_INTENTS)).min(1, "Select at least one interest"),
+  intent_tags: z.array(z.string()).min(1, "Select at least one interest"),
 });
 
 export type StallLeadFormValues = z.infer<typeof stallLeadSchema>;
