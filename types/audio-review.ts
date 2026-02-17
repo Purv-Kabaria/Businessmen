@@ -19,8 +19,6 @@ export interface AudioInteraction {
     audioUrls: (string | null)[];
     audioObjectKeys: string[];
     transcript: string | null;
-    interactionIdByAudioIndex?: string[];
-    allInteractionIds?: string[];
     structuredSnapshot: {
         /** Timestamp-based segments for sentence-level seek and highlighting. */
         segments?: Array<{ text: string; start: number; end: number }>;

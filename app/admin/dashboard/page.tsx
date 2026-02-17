@@ -29,6 +29,7 @@ import {
     BreadcrumbPage,
     BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
+import { CaptureSyncButtons } from "@/components/offline/capture-sync-buttons";
 
 interface AdminAnalytics {
     totalUsers: number;
@@ -121,9 +122,12 @@ export default function AdminDashboardPage() {
                     </BreadcrumbList>
                 </Breadcrumb>
 
-                <div>
-                    <h1 className="text-3xl font-bold font-serif tracking-tight">Admin Dashboard</h1>
-                    <p className="mt-1 text-muted-foreground">Site-wide analytics, data management, and quick access.</p>
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                        <h1 className="text-3xl font-bold font-serif tracking-tight">Admin Dashboard</h1>
+                        <p className="mt-1 text-muted-foreground">Site-wide analytics, data management, and quick access.</p>
+                    </div>
+                    <CaptureSyncButtons />
                 </div>
 
                 <section>

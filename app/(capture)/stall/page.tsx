@@ -5,7 +5,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { AnimatePresence, motion } from "framer-motion";
-import Link from "next/link";
 
 import {
   AlertDialog,
@@ -52,7 +51,7 @@ import {
 } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { Loader2, CheckCircle2, UserRound, Phone, Mail, Check, ChevronsUpDown, X, ArrowLeft } from "lucide-react";
+import { Loader2, CheckCircle2, UserRound, Phone, Mail, Check, ChevronsUpDown, X } from "lucide-react";
 import { STALL_INTENTS } from "@/modules/capture/constants";
 import { addContact, clearDraft, getDeviceId, getDraft, setDraft, type DraftData } from "@/modules/capture/db";
 import { hasLocalDuplicate } from "@/modules/capture/local-duplicate";
@@ -218,17 +217,8 @@ export default function StallPage() {
   }
 
   return (
-    <main className="flex min-h-screen flex-col bg-linear-to-b from-secondary/40 to-background">
-      <div className="sticky top-0 z-10 shrink-0 border-b border-border bg-background px-4 py-3">
-        <Link
-          href="/"
-          className="inline-flex h-9 items-center gap-2 rounded-md border-2 border-primary/30 bg-background px-3 py-2 text-sm font-medium text-foreground shadow-sm hover:bg-primary/10 hover:border-primary/50"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Go to home
-        </Link>
-      </div>
-      <div className="flex flex-1 flex-col items-center justify-center p-4">
+    <main className="flex min-h-dvh flex-col bg-linear-to-b from-secondary/40 to-background">
+      <div className="flex flex-1 flex-col items-center justify-center p-4 sm:p-6">
       <AlertDialog open={showDraftPrompt} onOpenChange={(open) => !open && handleDiscardDraft()}>
         <AlertDialogContent>
           <AlertDialogHeader>

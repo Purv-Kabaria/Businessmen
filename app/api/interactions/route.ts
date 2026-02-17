@@ -9,7 +9,6 @@ import {
     verifySession,
 } from "@/lib/api-utils";
 import { normalizePhone } from "@/modules/capture/utils";
-import { findContactByPhoneLast10 } from "@/lib/contact-lookup";
 import { randomUUID } from "node:crypto";
 
 type ContactDelegate = {
@@ -17,10 +16,7 @@ type ContactDelegate = {
     create: (args: { data: Record<string, unknown> }) => Promise<{ id: string }>;
 };
 type InteractionDelegate = {
-    findFirst: (args: {
-        where: { contactId: string; createdBy?: string };
-        orderBy?: { createdAt: "desc" };
-    }) => Promise<{ id: string; audioObjectKeys: string[] } | null>;
+    findFirst: (args: { where: { contactId: string }; orderBy: { createdAt: "desc" } }) => Promise<{ id: string; audioObjectKeys: string[] } | null>;
     update: (args: { where: { id: string }; data: { audioObjectKeys: string[] } }) => Promise<{ id: string; audioObjectKeys: string[] }>;
     create: (args: { data: Record<string, unknown> }) => Promise<{ id: string; audioObjectKeys: string[] }>;
 };
@@ -28,10 +24,6 @@ type AiJobDelegate = {
     create: (args: { data: { interactionId: string; status: string } }) => Promise<{ id: string }>;
 };
 type PrismaWithModels = typeof prisma & { contact: ContactDelegate; interaction: InteractionDelegate; aiJob: AiJobDelegate };
-
-type InteractionResult =
-    | { interaction: { id: string; audioObjectKeys: string[] }; ai_job: { id: string }; appended: false }
-    | { interaction: { id: string; audioObjectKeys: string[] }; ai_job: null; appended: true };
 
 export async function POST(req: Request) {
     try {
@@ -60,11 +52,13 @@ export async function POST(req: Request) {
             }
             contact_id = existing.id;
         } else if (phone) {
-            const existingByLast10 = await findContactByPhoneLast10(phone);
-            if (existingByLast10) {
-                contact_id = existingByLast10.id;
+            const normalizedPhone = normalizePhone(phone);
+            const existingByPhone = await client.contact.findUnique({
+                where: { phone: normalizedPhone },
+            });
+            if (existingByPhone) {
+                contact_id = existingByPhone.id;
             } else {
-                const normalizedPhone = normalizePhone(phone);
                 const newContact = await client.contact.create({
                     data: {
                         name: contact_name || "Unknown",
@@ -117,23 +111,23 @@ export async function POST(req: Request) {
             }
         }
 
-        const result: InteractionResult = await client.$transaction(async (tx) => {
+        const result = await client.$transaction(async (tx) => {
             const txClient = tx as PrismaWithModels;
-            const existingInteractionByUser = await txClient.interaction.findFirst({
-                where: { contactId: contact_id, createdBy: session.id },
+            const existingInteraction = await txClient.interaction.findFirst({
+                where: { contactId: contact_id },
                 orderBy: { createdAt: "desc" },
             });
 
-            if (existingInteractionByUser && audio_object_key) {
-                const updatedKeys = [...existingInteractionByUser.audioObjectKeys, audio_object_key];
+            if (existingInteraction && audio_object_key) {
                 await txClient.interaction.update({
-                    where: { id: existingInteractionByUser.id },
-                    data: { audioObjectKeys: updatedKeys },
+                    where: { id: existingInteraction.id },
+                    data: {
+                        audioObjectKeys: [...existingInteraction.audioObjectKeys, audio_object_key],
+                    },
                 });
                 return {
-                    interaction: { ...existingInteractionByUser, audioObjectKeys: updatedKeys },
-                    ai_job: null,
-                    appended: true,
+                    interaction: { ...existingInteraction, audioObjectKeys: [...existingInteraction.audioObjectKeys, audio_object_key] },
+                    ai_job: null as { id: string } | null,
                 };
             }
 
@@ -155,21 +149,17 @@ export async function POST(req: Request) {
                 },
             });
 
-            return { interaction, ai_job, appended: false };
+            return { interaction, ai_job };
         });
 
         if (result.interaction.audioObjectKeys?.length) {
             await addTranscribeJob({ interactionId: result.interaction.id });
         }
 
-        const statusMessage = result.appended
-            ? "Audio appended to existing interaction"
-            : "Interaction created and AI job scheduled";
-
         return createSuccessResponse({
             interaction_id: result.interaction.id,
             ai_job_id: result.ai_job?.id ?? null,
-            status: statusMessage,
+            status: result.ai_job ? "Interaction created and AI job scheduled" : "Audio appended to existing interaction",
         });
     } catch (error) {
         return handleUnexpectedError(error, "CREATE_INTERACTION");

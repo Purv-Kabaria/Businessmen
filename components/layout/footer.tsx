@@ -1,11 +1,28 @@
 "use client";
 import Link from "next/link";
 import { MapPin, Mail, Phone } from "lucide-react";
+import { useEffect } from "react";
 import { footerConfig } from "@/constants/layout/footer-constants";
+import { useAuthStore } from "@/store/useAuthStore";
 
 export function Footer() {
   const { companyName, tagline, socialLinks, sections, contactInfo, legal } =
     footerConfig;
+  const { user, checkAuth } = useAuthStore();
+
+  useEffect(() => {
+    checkAuth();
+  }, [checkAuth]);
+
+  const canShowStallField =
+    !user ||
+    (user.role !== "USER" && (user.role === "MODERATOR" || user.role === "ADMIN"));
+
+  const getLinkHref = (href: string) => {
+    if ((href === "/stall" || href === "/field") && !user)
+      return `/login?redirect=${encodeURIComponent(href)}`;
+    return href;
+  };
 
   return (
     <footer className="bg-card text-card-foreground relative overflow-hidden border-t">
@@ -41,11 +58,17 @@ export function Footer() {
               <h3 className="font-serif font-semibold text-lg mb-4 text-foreground">
                 {section.title}
               </h3>
-              {section.links.map((link) => (
-                <FooterLink key={link.label} href={link.href}>
-                  {link.label}
-                </FooterLink>
-              ))}
+              {section.links
+                .filter(
+                  (link) =>
+                    (link.href !== "/stall" && link.href !== "/field") ||
+                    canShowStallField
+                )
+                .map((link) => (
+                  <FooterLink key={link.label} href={getLinkHref(link.href)}>
+                    {link.label}
+                  </FooterLink>
+                ))}
             </div>
           ))}
 

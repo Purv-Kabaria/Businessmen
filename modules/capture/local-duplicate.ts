@@ -1,12 +1,12 @@
 import { getAllContacts } from "./db";
-import { normalizeEmail, phoneLast10 } from "./utils";
+import { normalizeEmail, normalizePhone } from "./utils";
 
 async function duplicateInIndexedDB(phone: string, email: string | undefined): Promise<boolean> {
   const contacts = await getAllContacts();
-  const inputLast10 = phone.trim() ? phoneLast10(phone) : null;
+  const normPhone = normalizePhone(phone);
   const normEmail = email?.trim() ? normalizeEmail(email) : null;
   return contacts.some((c) => {
-    if (inputLast10 && phoneLast10(c.phone) === inputLast10) return true;
+    if (normalizePhone(c.phone) === normPhone) return true;
     if (normEmail && c.email && normalizeEmail(c.email) === normEmail) return true;
     return false;
   });

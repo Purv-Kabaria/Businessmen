@@ -75,9 +75,8 @@ export async function POST(req: NextRequest) {
             return createErrorResponse("VALIDATION_ERROR", "This contact has no email address.", 400);
         }
 
-        const snapshot = interaction.structuredSnapshot as { summary?: string; action_items?: string[] } | null;
+        const snapshot = interaction.structuredSnapshot as { summary?: string } | null;
         const summary = snapshot?.summary ?? null;
-        const actionItems = Array.isArray(snapshot?.action_items) ? snapshot.action_items : null;
         let subject: string;
         let html: string;
         let text: string;
@@ -91,7 +90,6 @@ export async function POST(req: NextRequest) {
                     contact_company: interaction.contact?.company ?? null,
                     transcript: interaction.transcript ?? null,
                     summary: summary ?? null,
-                    action_items: actionItems ?? null,
                     model: "gemma3:4b",
                 }),
             });

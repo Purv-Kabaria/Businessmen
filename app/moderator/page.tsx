@@ -19,6 +19,7 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
+import { CaptureSyncButtons } from "@/components/offline/capture-sync-buttons";
 
 interface Analytics {
   totalUsers: number;
@@ -108,6 +109,7 @@ export default function ModeratorPage() {
             </Button>
             <h1 className="text-xl font-semibold">Moderator dashboard</h1>
           </div>
+          <CaptureSyncButtons />
         </div>
 
         {

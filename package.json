@@ -28,8 +28,7 @@
     "test:sentiment": "tsx scripts/test-sentiment.ts",
     "test:summarizer": "dotenv -- tsx scripts/test-summarizer.ts",
     "test:pipeline": "dotenv -- tsx scripts/test-all-pipeline.ts",
-    "seed:interaction": "dotenv -- tsx scripts/seed-interaction-from-audio.ts",
-    "fetch-gmail-replies": "dotenv -- tsx scripts/fetch-gmail-replies.ts"
+    "seed:interaction": "dotenv -- tsx scripts/seed-interaction-from-audio.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.500.0",
@@ -74,7 +73,6 @@
     "dexie-react-hooks": "^4.2.0",
     "embla-carousel-react": "^8.6.0",
     "framer-motion": "^12.23.24",
-    "googleapis": "^171.4.0",
     "input-otp": "^1.4.2",
     "ioredis": "^5.9.3",
     "jose": "^6.1.0",

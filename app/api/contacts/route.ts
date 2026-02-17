@@ -7,13 +7,12 @@ import {
     handlePrismaError,
 } from "@/lib/api-utils";
 import { normalizePhone } from "@/modules/capture/utils";
-import { findContactByPhoneLast10 } from "@/lib/contact-lookup";
 import { z } from "zod";
 
 type PrismaWithContact = typeof prisma & {
     contact: {
         upsert: (args: { where: { phone: string }; update: Record<string, unknown>; create: Record<string, unknown> }) => Promise<unknown>;
-        findUnique: (args: { where: { phone: string } | { id: string }; include?: { interactions: { orderBy: { createdAt: "desc" }; take: number } } }) => Promise<unknown>;
+        findUnique: (args: { where: { phone: string }; include?: { interactions: { orderBy: { createdAt: "desc" }; take: number } } }) => Promise<unknown>;
         findMany: (args: { orderBy: { updatedAt: "desc" }; take: number; include?: { _count: { select: { interactions: true } } } }) => Promise<unknown>;
     };
 };
@@ -45,12 +44,10 @@ export async function POST(req: Request) {
         const { name, email, phone, company, intentTags, sourceMode, eventId, deviceId } = validation.data;
         const { id } = body;
         const normalizedPhone = normalizePhone(phone);
-        const existingByLast10 = await findContactByPhoneLast10(phone);
-        const phoneForUpsert = existingByLast10?.phone ?? normalizedPhone;
 
         const client = prisma as PrismaWithContact;
         const contact = await client.contact.upsert({
-            where: { phone: phoneForUpsert },
+            where: { phone: normalizedPhone },
             update: {
                 name: name ?? undefined,
                 email: email ?? undefined,
@@ -61,7 +58,7 @@ export async function POST(req: Request) {
                 id: id || undefined,
                 name: name || "Unknown",
                 email: email || null,
-                phone: phoneForUpsert,
+                phone: normalizedPhone,
                 company,
                 intentTags: intentTags ?? undefined,
                 sourceMode,
@@ -86,20 +83,21 @@ export async function GET(req: Request) {
         const phone = searchParams.get("phone");
 
         if (phone) {
-            const existingByLast10 = await findContactByPhoneLast10(phone);
-            if (!existingByLast10) {
-                return createErrorResponse("NOT_FOUND", "Contact not found", 404);
-            }
+            const normalizedPhone = normalizePhone(phone);
             const contact = await client.contact.findUnique({
-                where: { id: existingByLast10.id },
+                where: { phone: normalizedPhone },
                 include: {
                     interactions: {
-                        orderBy: { createdAt: "desc" },
+                        orderBy: { createdAt: "desc" }, // Prisma uses property name, not DB map name
                         take: 10,
                     },
                 },
             });
-            if (!contact) return createErrorResponse("NOT_FOUND", "Contact not found", 404);
+
+            if (!contact) {
+                return createErrorResponse("NOT_FOUND", "Contact not found", 404);
+            }
+
             return createSuccessResponse(contact);
         }
 

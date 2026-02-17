@@ -236,45 +236,32 @@ def generate_followup_email(
     contact_company: Optional[str] = None,
     transcript: Optional[str] = None,
     summary: Optional[str] = None,
-    action_items: Optional[list] = None,
     model: str = DEFAULT_MODEL,
 ) -> dict:
     """
     Generate a personalized follow-up email from FinIdeas using Gemma3.
-    Uses contact name/company, summary, and optional transcript/action_items so the email references the actual conversation.
-    Returns {"subject": str, "body_plain": str}.
+    Returns {"subject": str, "body_plain": str}. Optional transcript/summary add context.
     """
     company_name = "FinIdeas"
     name = (contact_name or "").strip() or "there"
     company = (contact_company or "").strip()
-    context_parts = []
+    context = ""
     if summary and summary.strip():
-        context_parts.append(f"Summary of what was discussed:\n{summary.strip()}")
-    if action_items and len(action_items) > 0:
-        items = [str(i).strip() for i in action_items if str(i).strip()]
-        if items:
-            context_parts.append("Action items or key points from the conversation:\n" + "\n".join(f"- {i}" for i in items[:10]))
-    if transcript and transcript.strip():
-        # Add transcript context (use more when we have no summary, else shorter)
-        cap = 1200 if not (summary and summary.strip()) else 500
-        context_parts.append(f"Relevant excerpt from the conversation:\n{transcript.strip()[:cap]}")
-    context = "\n\n".join(context_parts) if context_parts else ""
+        context = f"\nSummary of what was discussed:\n{summary.strip()}\n"
+    elif transcript and transcript.strip():
+        # Use first ~800 chars of transcript as context if no summary
+        context = f"\nBrief context from the conversation:\n{transcript.strip()[:800]}\n"
 
-    prompt = f"""You are writing a personalized, professional follow-up email on behalf of {company_name} (a financial ideas / business company). The email must feel specific to this contact and the conversation you had—not generic.
+    prompt = f"""You are writing a short, professional follow-up email on behalf of {company_name} (a financial ideas / business company).
+The email is for taking follow-ups after a meeting or conversation with a contact.
 
-Contact: {name}{f" at {company}" if company else ""}
-{f"Context from the conversation (use this to personalize the email):\n{context}\n" if context else "No conversation context was provided—keep the email warm but general."}
-
-Instructions:
-- Address the contact by name and reference their company if relevant.
-- Reference specific topics, decisions, or next steps from the summary/conversation above so they feel the email is written for them.
-- If action items or key points are listed, acknowledge or follow up on 1–2 of them naturally.
-- Thank them for their time, suggest a clear next step (e.g. schedule a call, send materials), and offer to answer questions.
-- Sign off as "The {company_name} Team". Keep tone warm and professional. Plain text only.
+Contact name: {name}
+Contact company: {company if company else "Not specified"}
+{context}
 
 Write exactly two parts, no other text:
-1) SUBJECT: (one short, specific subject line—avoid generic "Follow-up"; reference the conversation or their name/company if it fits)
-2) BODY: (2–4 short paragraphs as above)
+1) SUBJECT: (one short subject line for the email, no "Subject:" prefix, just the line)
+2) BODY: (2-4 short paragraphs: thank them, reference the conversation if context was given, suggest next steps or offer to schedule a follow-up, sign off as "The {company_name} Team". Keep tone warm and professional. Plain text only.)
 
 Format your response exactly like this:
 SUBJECT:
@@ -331,84 +318,3 @@ BODY:
             "body_plain": f"Hi {name},\n\nThank you for connecting with us. We at {company_name} would like to follow up on our conversation. Please let us know when would be a good time to continue.\n\nBest regards,\nThe {company_name} Team",
             "error": str(e),
         }
-
-
-def classify_meeting_reply(
-    reply_text: str,
-    original_subject: Optional[str] = None,
-    model: str = DEFAULT_MODEL,
-    current_datetime: Optional[str] = None,
-    free_slots: Optional[list] = None,
-) -> dict:
-    """
-    Classify if an email reply indicates the person wants to schedule a meeting.
-    Returns {"wants_meeting": bool, "suggested_times": list or None}.
-    Optional current_datetime and free_slots give the LLM context for "today" and available times.
-    """
-    if not reply_text or len(reply_text.strip()) < 5:
-        return {"wants_meeting": False, "suggested_times": None}
-    subject_ctx = f"\nOriginal email subject: {original_subject}" if original_subject else ""
-    # Context: current date/time so the LLM can interpret "tomorrow", "next Tuesday", etc.
-    from datetime import datetime
-    now_ctx = ""
-    if current_datetime:
-        try:
-            dt = datetime.fromisoformat(current_datetime.replace("Z", "+00:00"))
-            now_ctx = f"\nCurrent date and time: {dt.strftime('%A, %B %d, %Y at %I:%M %p')} (use this for relative references like 'tomorrow', 'next week')."
-        except Exception:
-            now_ctx = f"\nCurrent date and time: {current_datetime}."
-    # Context: which slots are free so the LLM knows what can be offered
-    slots_ctx = ""
-    if free_slots and len(free_slots) > 0:
-        lines = []
-        for i, s in enumerate(free_slots[:15], 1):
-            start_s = s.get("start") if isinstance(s, dict) else None
-            end_s = s.get("end") if isinstance(s, dict) else None
-            if start_s and end_s:
-                try:
-                    start_dt = datetime.fromisoformat(start_s.replace("Z", "+00:00"))
-                    end_dt = datetime.fromisoformat(end_s.replace("Z", "+00:00"))
-                    lines.append(f"  {i}. {start_dt.strftime('%A %b %d, %I:%M %p')} – {end_dt.strftime('%I:%M %p')}")
-                except Exception:
-                    lines.append(f"  {i}. {start_s} – {end_s}")
-        if lines:
-            slots_ctx = "\n\nAvailable time slots (calendar is free at these times; you can reference these when the reply suggests meeting):\n" + "\n".join(lines)
-    prompt = f"""You are classifying an email reply to determine if the person is agreeing to schedule a meeting or call.{now_ctx}{slots_ctx}
-
-Reply text:
-{reply_text.strip()[:1500]}
-{subject_ctx}
-
-Answer with ONLY a JSON object (no other text):
-{{"wants_meeting": true or false, "suggested_times": ["optional list of mentioned times e.g. next Tuesday 2pm"] or null}}
-
-If they clearly agree to meet, say yes to a meeting, suggest a time, or say they're available, set wants_meeting to true. If they decline, are unclear, or just say thanks without agreeing, set wants_meeting to false. suggested_times: extract any specific times/days they mention, or null if none.
-JSON:"""
-    try:
-        response = requests.post(
-            f"{OLLAMA_HOST}/api/generate",
-            json={
-                "model": model,
-                "prompt": prompt,
-                "stream": False,
-                "options": {"temperature": 0.2, "num_predict": 150},
-            },
-            timeout=45,
-        )
-        if response.status_code != 200:
-            return {"wants_meeting": False, "suggested_times": None, "error": f"LLM {response.status_code}"}
-        data = response.json()
-        raw = (data.get("response") or "").strip()
-        match = re.search(r"\{[^{}]*\"wants_meeting\"[^{}]*\}", raw)
-        if match:
-            out = json.loads(match.group(0))
-            return {
-                "wants_meeting": bool(out.get("wants_meeting")),
-                "suggested_times": out.get("suggested_times") if isinstance(out.get("suggested_times"), list) else None,
-            }
-        if "yes" in raw.lower() or "agree" in raw.lower() or "meet" in raw.lower() or "schedule" in raw.lower():
-            return {"wants_meeting": True, "suggested_times": None}
-        return {"wants_meeting": False, "suggested_times": None}
-    except Exception as e:
-        print(f"[LLM] Classify meeting reply failed: {str(e)}")
-        return {"wants_meeting": False, "suggested_times": None, "error": str(e)}

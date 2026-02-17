@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createSuccessResponse, createErrorResponse } from "@/lib/api-utils";
-import { phoneLast10, normalizeEmail } from "@/modules/capture/utils";
+import { normalizePhone, normalizeEmail } from "@/modules/capture/utils";
 
 type PrismaWithContact = typeof prisma & {
   contact: {
@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
     if (!phone.trim() && !email?.trim()) {
       return createErrorResponse("VALIDATION_ERROR", "phone or email required", 400);
     }
-    const inputLast10 = phone.trim() ? phoneLast10(phone) : null;
+    const normPhone = normalizePhone(phone);
     const normEmail = email?.trim() ? normalizeEmail(email) : null;
     let contacts: { phone: string; email: string | null }[] = [];
     try {
@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
       return createSuccessResponse({ exists: false });
     }
     const exists = contacts.some((c) => {
-      if (inputLast10 && phoneLast10(c.phone) === inputLast10) return true;
+      if (normalizePhone(c.phone) === normPhone) return true;
       if (normEmail && c.email && normalizeEmail(c.email) === normEmail) return true;
       return false;
     });
