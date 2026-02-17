@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { ArrowLeft, Loader2, Users, UserCheck, Shield, FileAudio } from "lucide-react";
+import { ArrowLeft, Loader2, Users, UserCheck, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -125,23 +125,6 @@ export default function ModeratorPage() {
                   <CardContent>
                     <p className="text-sm text-muted-foreground">
                       View, create, edit, and delete users.
-                    </p>
-                  </CardContent>
-                </Card>
-              </Link>
-            </motion.div>
-            <motion.div variants={itemVariants}>
-              <Link href="/moderator/audio">
-                <Card className="hover:bg-accent hover:border-primary transition-colors cursor-pointer">
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <FileAudio className="h-5 w-5 text-primary" />
-                      Audio Review
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-sm text-muted-foreground">
-                      Listen to recorded interactions and view contact details.
                     </p>
                   </CardContent>
                 </Card>

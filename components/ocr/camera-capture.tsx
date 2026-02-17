@@ -72,62 +72,33 @@ export function CameraCapture({ onCapture, onClose }: CameraCaptureProps) {
 
         setIsProcessing(true);
         try {
-            // Create FormData to send image to FastAPI backend
+            // Create FormData to send image as file (or base64 string)
+            // Since our API expects FormData with 'image' file
             const blob = await fetch(capturedImage).then((r) => r.blob());
             const formData = new FormData();
             formData.append("image", blob, "card.jpg");
 
-            // Use FastAPI backend URL from environment variable
-            const OCR_API_URL = process.env.NEXT_PUBLIC_OCR_API_URL || "http://localhost:8000";
-
-            console.log("[OCR] Sending request to:", `${OCR_API_URL}/api/ocr`);
-
-            const res = await fetch(`${OCR_API_URL}/api/ocr`, {
+            const res = await fetch("/api/ocr", {
                 method: "POST",
                 body: formData,
             });
 
             if (!res.ok) {
-                const errorData = await res.json().catch(() => ({ error: "Server error" }));
-                throw new Error(errorData.error || errorData.detail || `OCR failed with status ${res.status}`);
+                const errorData = await res.json();
+                throw new Error(errorData.error || "OCR failed");
             }
 
             const result = await res.json();
 
-            console.log("[OCR] Response:", result);
-
             if (result.success && result.data) {
-                const confidence = result.meta?.confidence || 0;
-                const warnings = result.meta?.warnings || [];
-
-                // Show toast with confidence score
-                if (confidence > 70) {
-                    toast.success(`Card scanned! (${confidence}% confidence)`);
-                } else if (confidence > 40) {
-                    toast.warning(`Card scanned with low confidence (${confidence}%)`);
-                } else {
-                    toast.warning(`Card scanned but data may be incomplete (${confidence}%)`);
-                }
-
-                // Log warnings if any
-                if (warnings.length > 0) {
-                    console.log("[OCR] Warnings:", warnings);
-                }
-
-                // Pass both the image blob and the OCR data
-                onCapture({ image: blob, data: result.data });
+                toast.success("Card scanned successfully!");
+                onCapture(result.data);
             } else {
-                throw new Error("Invalid response format from OCR service");
+                throw new Error("Invalid response format");
             }
         } catch (err: any) {
-            console.error("[OCR] Error:", err);
-
-            // More descriptive error messages
-            if (err.message?.includes("fetch")) {
-                toast.error("Cannot connect to OCR service. Please ensure FastAPI backend is running.");
-            } else {
-                toast.error(`Scan failed: ${err.message}`);
-            }
+            console.error("OCR Error:", err);
+            toast.error(`Scan failed: ${err.message}`);
         } finally {
             setIsProcessing(false);
         }
@@ -200,8 +171,7 @@ export function CameraCapture({ onCapture, onClose }: CameraCaptureProps) {
                 {isProcessing && (
                     <div className="absolute inset-0 bg-background/80 backdrop-blur-sm flex flex-col items-center justify-center z-20">
                         <Loader2 className="h-10 w-10 animate-spin text-primary mb-2" />
-                        <p className="text-sm font-medium animate-pulse">Scanning with OCR...</p>
-                        <p className="text-xs text-muted-foreground mt-1">Extracting contact information</p>
+                        <p className="text-sm font-medium animate-pulse">Analyzing with AI...</p>
                     </div>
                 )}
             </div>

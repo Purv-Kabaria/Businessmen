@@ -161,8 +161,7 @@ class SyncService {
 
         if (interaction.audioBlob) {
             // Audio blobs from DB are typically simpler; append directly
-            // MediaRecorder produces WebM format, not WAV
-            formData.append('audio_file', interaction.audioBlob, `offline_${interaction.id}.webm`);
+            formData.append('audio_file', interaction.audioBlob, `offline_${interaction.id}.wav`);
         }
 
         const response = await fetch(`${API_BASE_URL}/interactions`, {

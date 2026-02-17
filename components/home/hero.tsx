@@ -40,7 +40,7 @@ export function Hero() {
             transition={{ duration: 0.8, delay: 0.3 }}>
             <Button
               size="lg"
-              className="bg-primary hover:bg-primary/90 text-primary-foreground text-base py-6 px-8 font-sans font-semibold rounded-md"
+              className="bg-primary hover:bg-chart-2 text-primary-foreground text-base py-6 px-8 font-sans font-semibold rounded-md"
               asChild>
               <Link href={HERO_CONTENT.ctas.primary.href}>
                 {HERO_CONTENT.ctas.primary.label}

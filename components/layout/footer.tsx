@@ -38,7 +38,7 @@ export function Footer() {
           {/* Dynamic Sections */}
           {sections.map((section) => (
             <div key={section.title}>
-              <h3 className="font-serif font-semibold text-lg mb-4 text-foreground">
+              <h3 className="font-serif font-semibold text-lg mb-4">
                 {section.title}
               </h3>
               {section.links.map((link) => (
@@ -51,9 +51,9 @@ export function Footer() {
 
           {/* Contact Section */}
           <div>
-<h3 className="font-serif font-semibold text-lg mb-4 text-foreground">
-            Contact Us
-          </h3>
+            <h3 className="font-serif font-semibold text-lg mb-4">
+              Contact Us
+            </h3>
             <div className="flex items-start mb-3">
               <MapPin className="h-5 w-5 mr-3 text-primary shrink-0 mt-1" />
               <span className="text-muted-foreground text-sm font-sans">
