@@ -2,7 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { ArrowLeft, Loader2 } from "lucide-react";
@@ -30,10 +30,21 @@ import { loginSchema } from "@/types/user";
 import { useAuthStore } from "@/store/useAuthStore";
 import type { z } from "zod";
 
+const ALLOWED_REDIRECT_PATHS = ["/stall", "/field", "/user", "/dashboard", "/moderator", "/admin"];
+
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [isLoading, setIsLoading] = useState(false);
   const { checkAuth } = useAuthStore();
+  const redirectTo = searchParams.get("redirect");
+  const safeRedirect =
+    redirectTo &&
+    ALLOWED_REDIRECT_PATHS.some(
+      (p) => redirectTo === p || (p.length > 1 && redirectTo.startsWith(p + "/"))
+    )
+      ? redirectTo
+      : null;
 
   const form = useForm<z.infer<typeof loginSchema>>({
     resolver: zodResolver(loginSchema),
@@ -70,7 +81,7 @@ export default function LoginPage() {
 
         await checkAuth();
         form.reset();
-        router.push("/user");
+        router.push(safeRedirect ?? "/user");
       } else {
         toast.error(result.error?.message || "Login failed. Please try again.");
       }
