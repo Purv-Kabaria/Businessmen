@@ -474,7 +474,7 @@ export default function AudioReviewPage() {
                                         </CardDescription>
                                     </div>
                                     <div className="flex flex-col items-end gap-1">
-                                        <div className="flex flex-wrap gap-1 justify-end">
+                                        <div className="flex flex-wrap gap-2 justify-end">
                                             {interaction.audioUrls.map((url, idx) => {
                                                 const key = `${interaction.id}-${idx}`;
                                                 const isPlaying = playingKey === key;
@@ -486,11 +486,12 @@ export default function AudioReviewPage() {
                                                         size="sm"
                                                         disabled={!url}
                                                         title={url ? `Play recording ${idx + 1}` : "Unavailable"}
+                                                        className="rounded-full px-5 font-bold shadow-sm"
                                                     >
                                                         {isPlaying ? (
-                                                            <><Pause className="h-4 w-4 mr-1" /> Pause</>
+                                                            <><Pause className="h-4 w-4 mr-2" /> Pause</>
                                                         ) : (
-                                                            <><Play className="h-4 w-4 mr-1" /> {idx + 1}</>
+                                                            <><Play className="h-4 w-4 mr-2" /> {idx + 1}</>
                                                         )}
                                                     </Button>
                                                 );
@@ -518,22 +519,9 @@ export default function AudioReviewPage() {
 
                                         <div className="flex flex-wrap items-center gap-2">
                                             <Button
-                                                variant={isCurrent && isPlaying ? "secondary" : "default"}
-                                                size="sm"
-                                                onClick={() => playTrack(interaction)}
-                                                className="rounded-full px-5 font-bold shadow-sm"
-                                            >
-                                                {isCurrent && isPlaying ? (
-                                                    <><Pause className="h-4 w-4 mr-2" /> Pause</>
-                                                ) : (
-                                                    <><Play className="h-4 w-4 mr-2" /> Listen</>
-                                                )}
-                                            </Button>
-
-                                            <Button
                                                 variant="outline"
                                                 size="sm"
-                                                className="rounded-full shadow-sm"
+                                                className="rounded-full px-5 font-bold shadow-sm"
                                                 onClick={() => handleTranscribe(interaction)}
                                                 disabled={transcribingId === interaction.id}
                                             >
@@ -548,33 +536,33 @@ export default function AudioReviewPage() {
                                     </div>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-6 mt-6">
                                         {/* Contact Details */}
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-muted/20 p-4 rounded-xl">
-                                            <div className="space-y-1">
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-muted/20 p-4 rounded-xl min-w-0">
+                                            <div className="space-y-1 min-w-0">
                                                 <span className="text-[10px] font-bold text-muted-foreground uppercase opacity-70">Company</span>
-                                                <div className="flex items-center gap-2 text-sm font-semibold">
-                                                    <Building2 className="h-4 w-4 text-muted-foreground" />
-                                                    {interaction.contact.company || "Not specified"}
+                                                <div className="flex items-center gap-2 text-sm font-semibold min-w-0">
+                                                    <Building2 className="h-4 w-4 shrink-0 text-muted-foreground" />
+                                                    <span className="truncate">{interaction.contact.company || "Not specified"}</span>
                                                 </div>
                                             </div>
-                                            <div className="space-y-1">
+                                            <div className="space-y-1 min-w-0">
                                                 <span className="text-[10px] font-bold text-muted-foreground uppercase opacity-70">Phone</span>
-                                                <div className="flex items-center gap-2 text-sm font-semibold">
-                                                    <Phone className="h-4 w-4 text-muted-foreground" />
-                                                    {interaction.contact.phone || "No phone"}
+                                                <div className="flex items-center gap-2 text-sm font-semibold min-w-0">
+                                                    <Phone className="h-4 w-4 shrink-0 text-muted-foreground" />
+                                                    <span className="truncate">{interaction.contact.phone || "No phone"}</span>
                                                 </div>
                                             </div>
-                                            <div className="space-y-1">
+                                            <div className="space-y-1 min-w-0">
                                                 <span className="text-[10px] font-bold text-muted-foreground uppercase opacity-70">Email</span>
-                                                <div className="flex items-center gap-2 text-sm font-semibold">
-                                                    <Mail className="h-4 w-4 text-muted-foreground" />
-                                                    {interaction.contact.email || "No email"}
+                                                <div className="flex items-center gap-2 text-sm font-semibold min-w-0">
+                                                    <Mail className="h-4 w-4 shrink-0 text-muted-foreground" />
+                                                    <span className="truncate" title={interaction.contact.email || undefined}>{interaction.contact.email || "No email"}</span>
                                                 </div>
                                             </div>
-                                            <div className="space-y-1">
+                                            <div className="space-y-1 min-w-0">
                                                 <span className="text-[10px] font-bold text-muted-foreground uppercase opacity-70">Agent</span>
-                                                <div className="flex items-center gap-2 text-sm font-semibold">
-                                                    <User className="h-4 w-4 text-muted-foreground" />
-                                                    {interaction.createdBy.fullName}
+                                                <div className="flex items-center gap-2 text-sm font-semibold min-w-0">
+                                                    <User className="h-4 w-4 shrink-0 text-muted-foreground" />
+                                                    <span className="truncate">{interaction.createdBy.fullName}</span>
                                                 </div>
                                             </div>
                                         </div>
