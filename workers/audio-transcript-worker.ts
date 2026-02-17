@@ -15,7 +15,7 @@ async function processUpload(payload: AudioTranscriptJobPayload) {
     if (!contact) throw new Error(`Contact not found: ${contact_server_id}`);
     contactId = contact.id;
   } else {
-    const contact = await prisma.contact.findUnique({ where: { offlineLocalId: contact_local_id }, select: { id: true } });
+    const contact = await prisma.contact.findFirst({ where: { offlineLocalId: contact_local_id }, select: { id: true } });
     if (!contact) throw new Error(`Contact not found by offline_local_id: ${contact_local_id}`);
     contactId = contact.id;
   }
