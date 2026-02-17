@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { Oxanium, Merriweather, Fira_Code } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
 import { Providers } from "@/components/providers";
-import { SyncOrchestratorLoader } from "@/components/offline/sync-orchestrator-loader";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -38,7 +37,6 @@ export default function RootLayout({
       <body
         className={`antialiased ${sans.variable} ${serif.variable} ${mono.variable}`}>
         <Providers>
-          <SyncOrchestratorLoader />
           {children}
           <Toaster />
         </Providers>

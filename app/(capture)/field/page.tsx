@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { CardScanButton } from "@/modules/capture/card-scan-button";
 import { STALL_INTENTS } from "@/modules/capture/constants";
 import { addContact, clearDraft, getDeviceId, getDraft, setDraft, type DraftData } from "@/modules/capture/db";
 import { hasLocalDuplicate } from "@/modules/capture/local-duplicate";
@@ -59,6 +60,7 @@ export default function FieldPage() {
   const [pendingDraft, setPendingDraft] = useState<DraftData | null>(null);
   const [duplicateConfirmPending, setDuplicateConfirmPending] = useState<StallLeadFormValues | null>(null);
   const [audioLocalId, setAudioLocalId] = useState<string | null>(null);
+  const [capturedCardImage, setCapturedCardImage] = useState<File | null>(null);
   const submitLockRef = useRef(false);
   const draftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -146,6 +148,7 @@ export default function FieldPage() {
     clearDraft("field").catch(() => {});
     form.reset({ name: "", phone: "", email: "", intent_tags: [] });
     setAudioLocalId(null);
+    setCapturedCardImage(null);
     setShowSuccess(true);
     toast.success("Saved. We'll sync when you're back online.");
     setTimeout(() => setShowSuccess(false), 2200);
@@ -230,6 +233,22 @@ export default function FieldPage() {
           >
             <Form {...form}>
               <form id="field-capture-form" onSubmit={form.handleSubmit(onSubmit)} className="mx-auto w-full max-w-xl space-y-4">
+                <div className="flex flex-col gap-2">
+                  <CardScanButton
+                    onCaptured={(file) => {
+                      setCapturedCardImage(file);
+                      toast.success("Card image captured. Enter details or we'll use it when OCR is ready.");
+                    }}
+                    variant="outline"
+                    size="sm"
+                    className="w-full"
+                  />
+                  {capturedCardImage && (
+                    <p className="text-xs text-muted-foreground">
+                      Card image attached.
+                    </p>
+                  )}
+                </div>
                 <FormField
                   control={form.control}
                   name="name"

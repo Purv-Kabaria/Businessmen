@@ -220,7 +220,7 @@ Use this as your ordered checklist. Dependencies: DB and API tasks after capture
 - [x] **A5** – Field route and layout (RM-optimized, one-handed).
 - [x] **A6** – Field form: same schema as stall; minimal fields; intent tags; optional audio reference (store `audio_local_id` or similar for Member 2).
 - [x] **A7** – Field draft and submit logic (same as stall, `source_mode = "field"`). Use the **same local duplicate check** (all contacts in IndexedDB, stall + field) before saving so a contact already captured at stall is not re-added from field.
-- [ ] **A8** – “Scan card” button in both Stall and Field; open camera/capture flow.
+- [x] **A8** – “Scan card” button in both Stall and Field; open camera/capture flow.
 
 ### B. Visiting card scan
 

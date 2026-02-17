@@ -36,6 +36,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { CardScanButton } from "@/modules/capture/card-scan-button";
 import { STALL_INTENTS } from "@/modules/capture/constants";
 import { addContact, clearDraft, getDeviceId, getDraft, setDraft, type DraftData } from "@/modules/capture/db";
 import { hasLocalDuplicate } from "@/modules/capture/local-duplicate";
@@ -79,6 +80,7 @@ export default function StallPage() {
   const [showDraftPrompt, setShowDraftPrompt] = useState(false);
   const [pendingDraft, setPendingDraft] = useState<DraftData | null>(null);
   const [duplicateConfirmPending, setDuplicateConfirmPending] = useState<StallLeadFormValues | null>(null);
+  const [capturedCardImage, setCapturedCardImage] = useState<File | null>(null);
   const draftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const form = useForm<StallLeadFormValues>({
@@ -163,6 +165,7 @@ export default function StallPage() {
     });
     clearDraft("stall").catch(() => {});
     form.reset({ name: "", phone: "", email: "", intent_tags: [] });
+    setCapturedCardImage(null);
     setShowSuccess(true);
     toast.success("Saved. We'll sync when you're back online.");
     setTimeout(() => setShowSuccess(false), 2200);
@@ -297,6 +300,22 @@ export default function StallPage() {
                     onSubmit={form.handleSubmit(onSubmit)}
                     className="space-y-6"
                   >
+                    <div className="flex flex-col gap-2">
+                      <CardScanButton
+                        onCaptured={(file) => {
+                          setCapturedCardImage(file);
+                          toast.success("Card image captured. Enter details below or we'll use it when OCR is ready.");
+                        }}
+                        variant="outline"
+                        size="lg"
+                        className="w-full"
+                      />
+                      {capturedCardImage && (
+                        <p className="text-xs text-muted-foreground">
+                          Card image attached. You can fill the form manually or wait for OCR (coming soon).
+                        </p>
+                      )}
+                    </div>
                     <motion.div
                       variants={container}
                       initial="hidden"
