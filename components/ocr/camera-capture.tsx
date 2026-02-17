@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
 interface CameraCaptureProps {
-    onCapture: (data: any) => void;
+    onCapture: (data: { image: Blob; data: unknown }) => void;
     onClose: () => void;
 }
 
@@ -119,14 +119,13 @@ export function CameraCapture({ onCapture, onClose }: CameraCaptureProps) {
             } else {
                 throw new Error("Invalid response format from OCR service");
             }
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error("[OCR] Error:", err);
-
-            // More descriptive error messages
-            if (err.message?.includes("fetch")) {
+            const message = err instanceof Error ? err.message : "Scan failed";
+            if (message.includes("fetch")) {
                 toast.error("Cannot connect to OCR service. Please ensure FastAPI backend is running.");
             } else {
-                toast.error(`Scan failed: ${err.message}`);
+                toast.error(`Scan failed: ${message}`);
             }
         } finally {
             setIsProcessing(false);

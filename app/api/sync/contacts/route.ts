@@ -7,13 +7,20 @@ import { addContactUpsertJob, type ContactSyncJobPayload } from "@/lib/queue/con
 import { addTranscribeJob } from "@/lib/queue/transcribe";
 import { prisma } from "@/lib/prisma";
 
-type PrismaWithContact = typeof prisma & {
+type PrismaWithContactAndInteraction = typeof prisma & {
     contact: {
         upsert: (args: {
             where: { phone: string };
             update: Record<string, unknown>;
             create: Record<string, unknown>;
         }) => Promise<unknown>;
+    };
+    interaction: {
+        findMany: (args: {
+            where: { audioObjectKeys: { isEmpty: false }; OR: Array<{ transcript: null } | { transcript: "" }> };
+            select: { id: true };
+            take: number;
+        }) => Promise<{ id: string }[]>;
     };
 };
 
@@ -78,7 +85,7 @@ export async function POST(req: Request) {
     let upserted = 0;
     try {
         for (const p of payloads) {
-            await (prisma as PrismaWithContact).contact.upsert({
+            await (prisma as PrismaWithContactAndInteraction).contact.upsert({
                 where: { phone: p.phone },
                 update: {
                     name: p.name ?? undefined,
@@ -110,8 +117,8 @@ export async function POST(req: Request) {
             await addContactUpsertJob(p);
         }
 
-        // Enqueue transcribe (AI worker) for any interactions that have audio but no transcript
-        const needTranscript = await prisma.interaction.findMany({
+        const client = prisma as PrismaWithContactAndInteraction;
+        const needTranscript = await client.interaction.findMany({
             where: {
                 audioObjectKeys: { isEmpty: false },
                 OR: [{ transcript: null }, { transcript: "" }],

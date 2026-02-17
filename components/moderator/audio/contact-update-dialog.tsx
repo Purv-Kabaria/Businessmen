@@ -15,7 +15,7 @@ interface ContactUpdateDialogProps {
         company: string | null;
         email: string | null;
     } | null;
-    setSuggestedUpdate: (update: any) => void;
+    setSuggestedUpdate: (update: { name: string | null; company: string | null; email: string | null; interactionId?: string } | null) => void;
     onUpdate: () => void;
 }
 

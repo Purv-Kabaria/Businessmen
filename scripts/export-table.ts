@@ -1,28 +1,37 @@
-import { PrismaClient, Prisma } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
 
+// Load .env
 dotenv.config();
 
 // === DB URL MAP FROM ENV ===
 const DB_MAP: Record<string, string | undefined> = {
     main: process.env.DATABASE_MAIN,
-    local: process.env.DATABASE_LOCAL,
+    local: process.env.DATABASE_LOCAL, // Ensure this matches your local .env key
 };
 
-// === READ ARGUMENT ===
-const dbKey = process.argv[2] || "main";
+// === READ ARGUMENTS ===
+const tableName = process.argv[2];
+const dbKey = process.argv[3] || "main";
+
+if (!tableName) {
+    console.error("❌ Please provide a table name.\nUsage: pnpm export-table User [main|local]");
+    process.exit(1);
+}
 
 if (!DB_MAP[dbKey]) {
-    console.error(`❌ Missing env for DB: "${dbKey}"`);
+    console.error(`❌ Missing env for DB: "${dbKey}".`);
+    console.error(`Add DATABASE_MAIN or DATABASE_LOCAL to your .env file.`);
     process.exit(1);
 }
 
 console.log(`🔌 Connecting to database: ${dbKey}`);
-console.log(`📦 Exporting ALL tables...`);
+console.log(`📦 Exporting table: ${tableName}`);
 
+// === CREATE DYNAMIC PRISMA CLIENT ===
 const prisma = new PrismaClient({
     datasources: {
         db: {
@@ -32,33 +41,28 @@ const prisma = new PrismaClient({
 });
 
 async function main() {
-    const models = Prisma.dmmf.datamodel.models;
+    type PrismaFindManyDelegate = { findMany: () => Promise<{ id: string }[]> };
+    const model = (prisma as Record<string, PrismaFindManyDelegate>)[tableName];
 
-    for (const modelMeta of models) {
-        const modelName = modelMeta.name;
-        const model = (prisma as any)[modelName];
-
-        if (!model?.findMany) continue;
-
-        console.log(`⬇️ Exporting ${modelName}...`);
-
-        const records = await model.findMany();
-
-        const outputDir = path.join("db", dbKey, modelName);
-        fs.mkdirSync(outputDir, { recursive: true });
-
-        for (const record of records) {
-            const id = record.id || crypto.randomUUID();
-            fs.writeFileSync(
-                path.join(outputDir, `${id}.json`),
-                JSON.stringify(record, null, 2)
-            );
-        }
-
-        console.log(`   ✅ ${records.length} record(s) exported.`);
+    if (!model || typeof model.findMany !== "function") {
+        console.error(`❌ Model "${tableName}" not found in Prisma schema.`);
+        process.exit(1);
     }
 
-    console.log(`🎉 Database export complete!`);
+    const records = await model.findMany();
+
+    const outputDir = path.join("db", dbKey, tableName);
+    fs.mkdirSync(outputDir, { recursive: true });
+
+    for (const record of records) {
+        const id = record.id || crypto.randomUUID();
+        fs.writeFileSync(
+            path.join(outputDir, `${id}.json`),
+            JSON.stringify(record, null, 2)
+        );
+    }
+
+    console.log(`✅ Export complete! Wrote ${records.length} file(s) to ${outputDir}`);
 }
 
 main()

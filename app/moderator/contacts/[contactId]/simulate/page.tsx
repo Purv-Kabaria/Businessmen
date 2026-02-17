@@ -53,9 +53,9 @@ export default function SimulationPage() {
 
             setData(result.data);
             toast.success("Strategy generated");
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error(err);
-            setError(err.message || "Failed to generate simulation");
+            setError(err instanceof Error ? err.message : "Failed to generate simulation");
             toast.error("Simulation failed");
         } finally {
             setLoading(false);

@@ -14,11 +14,12 @@ console.log("🔌 Using DATABASE_URL");
 const prisma = new PrismaClient();
 
 async function main() {
+    type PrismaDelegate = { deleteMany: () => Promise<unknown> };
     const modelNames = Object.keys(prisma).filter(
         (key) =>
             !key.startsWith("$") &&
             !key.startsWith("_") &&
-            typeof (prisma as any)[key]?.deleteMany === "function"
+            typeof (prisma as Record<string, PrismaDelegate>)[key]?.deleteMany === "function"
     );
 
     const filteredModels = modelNames.filter(
@@ -30,7 +31,7 @@ async function main() {
 
     const deleteOperations = filteredModels
         .reverse()
-        .map((model) => (prisma as any)[model].deleteMany());
+        .map((model) => (prisma as Record<string, PrismaDelegate>)[model].deleteMany());
 
     await prisma.$transaction(deleteOperations);
 

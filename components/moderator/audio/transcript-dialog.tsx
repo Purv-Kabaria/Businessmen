@@ -1,11 +1,11 @@
 "use client";
 
 import {
-    FileText, Sparkles, Loader2, X
+    FileText, Sparkles, Loader2, Play, ChevronRight
 } from "lucide-react";
 import { format } from "date-fns";
 import {
-    Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogClose
+    Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { AudioInteraction } from "@/types/audio-review";
@@ -16,6 +16,7 @@ interface TranscriptDialogProps {
     interaction: AudioInteraction | null;
     generatedTranscript: string | undefined;
     onSummarize: (interaction: AudioInteraction) => void;
+    onPlay: (interaction: AudioInteraction) => void;
     onSeek: (seconds: number) => void;
     isSummarizing: boolean;
     formatTime: (seconds: number | null) => string;
@@ -27,6 +28,7 @@ export function TranscriptDialog({
     interaction,
     generatedTranscript,
     onSummarize,
+    onPlay,
     onSeek,
     isSummarizing,
     formatTime
@@ -39,9 +41,9 @@ export function TranscriptDialog({
 
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>
-            <DialogContent className="max-w-4xl w-[95vw] sm:w-full max-h-[90vh] flex flex-col p-0 overflow-hidden rounded-lg gap-0" showCloseButton={false}>
-                <DialogHeader className="p-4 sm:p-6 border-b bg-muted/20 relative">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pr-8 sm:pr-10">
+            <DialogContent className="max-w-4xl w-[95vw] sm:w-full max-h-[90vh] flex flex-col p-0 overflow-hidden rounded-lg gap-0">
+                <DialogHeader className="p-4 sm:p-6 border-b bg-muted/20">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                         <div className="flex items-center gap-3 min-w-0">
                             <div className="h-9 w-9 rounded-lg bg-muted flex items-center justify-center shrink-0">
                                 <FileText className="h-4 w-4 text-muted-foreground" />
@@ -72,12 +74,17 @@ export function TranscriptDialog({
                                 )}
                                 {summary ? "Update summary" : "Summarize"}
                             </Button>
+                            <Button
+                                variant="default"
+                                size="sm"
+                                onClick={() => onPlay(interaction)}
+                                className="h-8 text-xs"
+                            >
+                                <Play className="h-3.5 w-3.5 mr-1.5 fill-current" />
+                                Play
+                            </Button>
                         </div>
                     </div>
-                    <DialogClose className="absolute top-4 right-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none [&_svg]:size-4">
-                        <X className="h-4 w-4" />
-                        <span className="sr-only">Close</span>
-                    </DialogClose>
                 </DialogHeader>
 
                 <div className="flex-1 overflow-y-auto p-4 sm:p-8 space-y-6 sm:space-y-8">
@@ -103,9 +110,9 @@ export function TranscriptDialog({
                         <div className="p-4 rounded-lg border bg-muted/5 text-sm leading-relaxed min-h-0 max-h-[min(50vh,400px)] overflow-y-auto overflow-x-hidden">
                             {segments ? (
                                 <div className="flex flex-wrap gap-x-1 sm:gap-x-1.5 gap-y-2 sm:gap-y-3">
-                                    {segments.map((seg: any, idx: number) => {
-                                        const isHotspot = interaction.structuredSnapshot?.hotspots?.some((hs: any) =>
-                                            Math.abs(hs.start - seg.start) < 0.1
+                                    {segments.map((seg: { text: string; start: number; end: number }, idx: number) => {
+                                        const isHotspot = interaction.structuredSnapshot?.hotspots?.some((hs: { start?: number; end?: number }) =>
+                                            typeof hs.start === "number" && Math.abs(hs.start - seg.start) < 0.1
                                         );
 
                                         return (

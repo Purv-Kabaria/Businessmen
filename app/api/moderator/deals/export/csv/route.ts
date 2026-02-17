@@ -2,6 +2,22 @@ import { NextRequest, NextResponse } from "next/server";
 import { jwtVerify } from "jose";
 import { prisma } from "@/lib/prisma";
 
+type PrismaWithInteraction = typeof prisma & {
+    interaction: {
+        findMany: (args: { where: { audioObjectKeys: { isEmpty: false } }; include: { contact: { select: { id: true; name: true; phone: true; email: true; company: true } }; createdByUser: { select: { id: true; fullName: true; email: true } } }; orderBy: { createdAt: "desc" } }) => Promise<DealExportRow[]>;
+    };
+};
+type DealExportRow = {
+    id: string;
+    createdAt: Date;
+    dealProfitable: boolean | null;
+    dealEngaging: boolean | null;
+    dealWorthy: boolean | null;
+    dealRemarks?: string | null;
+    contact: { id: string; name: string | null; phone: string; email: string | null; company: string | null };
+    createdByUser: { id: string; fullName: string | null; email: string } | null;
+};
+
 export async function GET(req: NextRequest) {
     try {
         const token = req.cookies.get("token")?.value;
@@ -13,12 +29,12 @@ export async function GET(req: NextRequest) {
         const role = (payload as { role?: string }).role;
         if (!["MODERATOR", "ADMIN"].includes(role || "")) return new NextResponse("Forbidden", { status: 403 });
 
-        const interactions = await prisma.interaction.findMany({
+        const client = prisma as PrismaWithInteraction;
+        const interactions = await client.interaction.findMany({
             where: { audioObjectKeys: { isEmpty: false } },
             include: {
                 contact: { select: { id: true, name: true, phone: true, email: true, company: true } },
                 createdByUser: { select: { id: true, fullName: true, email: true } },
-                aiJobs: { select: { status: true }, orderBy: { createdAt: "desc" }, take: 1 },
             },
             orderBy: { createdAt: "desc" },
         });
@@ -48,31 +64,11 @@ export async function GET(req: NextRequest) {
             "Worthy",
             "Remarks",
             "Captured By",
-            "AI Status",
-            "Transcription",
-            "Sentiment",
-            "Summary",
-            "Tags"
         ];
 
-        const rows = interactions.map((item) => {
+        const rows = interactions.map((item: DealExportRow) => {
             const contact = item.contact;
             const createdBy = item.createdByUser;
-            const snapshot = (item.structuredSnapshot as any) || {};
-            const aiStatus = (item as any).aiJobs?.[0]?.status || "none";
-
-            // Format tags
-            let tagsStr = "";
-            if (item.tags) {
-                if (Array.isArray(item.tags)) {
-                    tagsStr = item.tags.join(", ");
-                } else if (typeof item.tags === "object") {
-                    tagsStr = JSON.stringify(item.tags);
-                } else {
-                    tagsStr = String(item.tags);
-                }
-            }
-
             return [
                 escapeCSV(item.id),
                 escapeCSV(contact.name),
@@ -85,11 +81,6 @@ export async function GET(req: NextRequest) {
                 escapeCSV(formatVerdict(item.dealWorthy ?? undefined)),
                 escapeCSV(item.dealRemarks ?? ""),
                 escapeCSV(createdBy?.fullName ?? ""),
-                escapeCSV(aiStatus),
-                escapeCSV(item.transcript ?? ""),
-                escapeCSV(snapshot.sentiment || snapshot.voiceEmotion || ""),
-                escapeCSV(snapshot.summary || ""),
-                escapeCSV(tagsStr),
             ].join(",");
         });
 

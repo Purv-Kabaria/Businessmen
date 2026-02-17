@@ -46,9 +46,9 @@ export function AudioAnalysisDashboard({ interaction }: AudioAnalysisDashboardPr
                                     <Zap className="h-3 w-3" /> Key points ({hotspots.length})
                                 </p>
                                 <ul className="space-y-1.5">
-                                    {hotspots.slice(0, 10).map((hs: any, i: number) => (
+                                    {hotspots.slice(0, 10).map((hs: { label?: string; topic?: string; text?: string } | string, i: number) => (
                                         <li key={i} className="text-xs sm:text-sm bg-muted/40 px-2 py-1.5 rounded border wrap-break-word">
-                                            {hs?.label ?? hs?.topic ?? hs?.text ?? (typeof hs === "string" ? hs : "Highlight")}
+                                            {typeof hs === "string" ? hs : (hs?.label ?? hs?.topic ?? hs?.text ?? "Highlight")}
                                         </li>
                                     ))}
                                     {hotspots.length > 10 && (
@@ -101,7 +101,7 @@ export function AudioAnalysisDashboard({ interaction }: AudioAnalysisDashboardPr
                                 <div className="space-y-1">
                                     <p className="text-xs">Emotions</p>
                                     <div className="flex flex-wrap gap-1">
-                                        {(emotions ?? []).slice(0, 3).map((e: any, i: number) => (
+                                        {(emotions ?? []).slice(0, 3).map((e: { label: string; score: number }, i: number) => (
                                             <span key={i} className="text-xs bg-muted px-1.5 py-0.5 rounded">
                                                 {e.label} ({(e.score * 100).toFixed(0)}%)
                                             </span>
