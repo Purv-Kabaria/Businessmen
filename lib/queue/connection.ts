@@ -26,19 +26,24 @@ export function getRedisConnection(): Redis {
   return getRedis();
 }
 
+const LOCAL_REDIS = "redis://127.0.0.1:6379";
+
 let bullmqConnection: IORedis | null = null;
 
 export function getBullMQConnection(): IORedis {
   if (!bullmqConnection) {
-    const redisUrl = process.env.REDIS_URL?.trim();
+    let redisUrl = process.env.REDIS_URL?.trim();
     if (!redisUrl) {
-      throw new Error(
-        "REDIS_URL must be set for BullMQ. Use the Redis Connect (TCP) URL from Upstash, e.g. rediss://default:PASSWORD@xxx.upstash.io:6379"
-      );
+      redisUrl = LOCAL_REDIS;
+      if (process.env.NODE_ENV !== "test") {
+        console.warn(
+          "[BullMQ] REDIS_URL not set; using local Redis at 127.0.0.1:6379. Start Redis locally or set REDIS_URL (e.g. Upstash Redis Connect URL)."
+        );
+      }
     }
     if (redisUrl.startsWith("http://") || redisUrl.startsWith("https://")) {
       throw new Error(
-        "REDIS_URL must be the Redis Connect (TCP) URL, not the REST URL. In Upstash dashboard open your Redis → Redis Connect and copy the URL (starts with rediss://). Replace REDIS_URL in .env with that value."
+        "REDIS_URL must be the Redis Connect (TCP) URL, not the REST URL. In Upstash dashboard open your Redis → Redis Connect and copy the URL (starts with rediss://). For local dev use redis://127.0.0.1:6379."
       );
     }
     bullmqConnection = new IORedis(redisUrl, {

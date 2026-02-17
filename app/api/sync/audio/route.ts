@@ -99,7 +99,11 @@ export async function POST(req: Request) {
 
         await addTranscribeJob({ interactionId: interaction.id });
 
-        return createSuccessResponse({ enqueued: 1, interactionId: interaction.id });
+        return createSuccessResponse({
+            enqueued: 1,
+            interactionId: interaction.id,
+            transcribeEnqueued: true,
+        });
     } catch (dbError: unknown) {
         if (isPrismaTableMissingError(dbError)) {
             return createErrorResponse(

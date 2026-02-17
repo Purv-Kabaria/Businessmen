@@ -85,8 +85,8 @@ function draftToFormValues(d: DraftData): StallLeadFormValues {
   };
 }
 
-function formIntentTagsToDraft(tags: (string | undefined)[] | undefined): string[] | undefined {
-  const list = (tags ?? []).filter((t): t is StallIntent => t != null && STALL_INTENTS.includes(t as StallIntent));
+function formIntentTagsToDraft(tags: (StallIntent | undefined)[] | undefined): string[] | undefined {
+  const list = (tags ?? []).filter((t): t is StallIntent => t != null);
   return list.length ? list : undefined;
 }
 

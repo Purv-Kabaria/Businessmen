@@ -4,6 +4,7 @@ import {
     verifySession,
 } from "@/lib/api-utils";
 import { addContactUpsertJob, type ContactSyncJobPayload } from "@/lib/queue/contacts-sync";
+import { addTranscribeJob } from "@/lib/queue/transcribe";
 import { prisma } from "@/lib/prisma";
 
 type PrismaWithContact = typeof prisma & {
@@ -108,7 +109,24 @@ export async function POST(req: Request) {
         for (const p of payloads.slice(0, upserted)) {
             await addContactUpsertJob(p);
         }
-        return createSuccessResponse({ enqueued: upserted });
+
+        // Enqueue transcribe (AI worker) for any interactions that have audio but no transcript
+        const needTranscript = await prisma.interaction.findMany({
+            where: {
+                audioObjectKeys: { isEmpty: false },
+                OR: [{ transcript: null }, { transcript: "" }],
+            },
+            select: { id: true },
+            take: 100,
+        });
+        for (const row of needTranscript) {
+            await addTranscribeJob({ interactionId: row.id });
+        }
+
+        return createSuccessResponse({
+            enqueued: upserted,
+            transcribeEnqueued: needTranscript.length,
+        });
     } catch (dbError: unknown) {
         if (isPrismaTableMissingError(dbError)) {
             return createErrorResponse(

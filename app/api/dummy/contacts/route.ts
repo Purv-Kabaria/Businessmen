@@ -11,10 +11,10 @@ export async function GET() {
     const contacts = await prisma.contact.findMany({
       include: {
         interactions: {
-          where: { audioObjectKeys: { isEmpty: false } },
+          where: { audioObjectKey: { not: null } },
           select: {
             id: true,
-            audioObjectKeys: true,
+            audioObjectKey: true,
             createdAt: true,
           },
         },
@@ -30,15 +30,14 @@ export async function GET() {
         email: c.email,
         company: c.company,
         interactions: await Promise.all(
-          (c.interactions as { id: string; audioObjectKeys: string[]; createdAt: Date }[]).map(
+          (c.interactions as { id: string; audioObjectKey: string | null; createdAt: Date }[]).map(
             async (i) => {
-              const firstKey = i.audioObjectKeys?.length ? i.audioObjectKeys[0] : null;
               let audioUrl: string | null = null;
-              if (firstKey) {
+              if (i.audioObjectKey) {
                 try {
                   const command = new GetObjectCommand({
                     Bucket: BUCKET,
-                    Key: firstKey,
+                    Key: i.audioObjectKey,
                   });
                   audioUrl = await getSignedUrl(s3Client, command, {
                     expiresIn: 3600,
@@ -49,7 +48,7 @@ export async function GET() {
               }
               return {
                 id: i.id,
-                audioObjectKeys: i.audioObjectKeys,
+                audioObjectKey: i.audioObjectKey,
                 audioUrl,
                 createdAt: i.createdAt,
               };
