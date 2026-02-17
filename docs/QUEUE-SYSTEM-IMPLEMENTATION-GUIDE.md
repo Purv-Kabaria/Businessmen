@@ -157,9 +157,9 @@ Prices below are indicative; check each provider for current plans.
 
 ### C. Resilience (Queue Layer)
 
-- [ ] **Q9** – Contacts: no partial state; client only calls `updateContact` after API returns 2xx (and API has enqueued to BullMQ; worker runs async).
-- [ ] **Q10** – Audio: on failure, client or API response can signal retry; queue impl provides update function. BullMQ worker retries with backoff on throw.
-- [ ] **Q11** – Optional: cleanup audio queue — delete items with status `done` or `failed` and `processed_at` older than 7 days.
+- [x] **Q9** – Contacts: no partial state; client only calls `updateContact` after API returns 2xx (and API has enqueued to BullMQ; worker runs async).
+- [x] **Q10** – Audio: on failure, client or API response can signal retry; queue impl provides update function. BullMQ worker retries with backoff on throw.
+- [x] **Q11** – Optional: cleanup audio queue — delete items with status `done` or `failed` and `processed_at` older than 7 days.
 
 ### D. BullMQ (Server)
 
@@ -245,7 +245,7 @@ Prices below are indicative; check each provider for current plans.
 | Area | Files / Modules |
 |------|------------------|
 | Client — contacts queue | `modules/capture/db.ts` — `updateContact`, `getUnsyncedContacts` (sorted), `addContact`. Contract: `docs/CONTACTS-QUEUE-CONTRACT.md`. |
-| Client — audio transcript queue | `modules/capture/db.ts` — store `audio_transcript_queue`, `enqueueAudioTranscriptItem`, `getPendingAudioTranscriptItems`, `updateAudioTranscriptItemStatus`. |
+| Client — audio transcript queue | `modules/capture/db.ts` — `enqueueAudioTranscriptItem`, `getPendingAudioTranscriptItems`, `updateAudioTranscriptItemStatus`, `recordAudioTranscriptItemFailure`, `cleanupAudioTranscriptQueue`, `MAX_AUDIO_TRANSCRIPT_RETRIES`, `DEFAULT_CLEANUP_AGE_MS`. Contract: `docs/AUDIO-QUEUE-CONTRACT.md`. |
 | Client — sync when online | e.g. `hooks/use-capture-sync.ts` or similar — getUnsyncedContacts / getPendingAudioTranscriptItems, POST to /api/sync/contacts and /api/sync/audio, then updateContact / updateAudioTranscriptItemStatus on 2xx. |
 | Server — Redis | `lib/queue/connection.ts` — shared ioredis connection; use `REDIS_URL` (Upstash / Redis Cloud). |
 | Server — BullMQ queues | `lib/queue/contacts-sync.ts`, `lib/queue/audio-transcript.ts` — Queue instances; audio payload uses storage key only. |

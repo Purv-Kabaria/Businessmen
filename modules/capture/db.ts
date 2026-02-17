@@ -11,6 +11,10 @@ export type AudioTranscriptQueueItemStatus = "pending" | "processing" | "done" |
 
 const STALE_PROCESSING_MS = 5 * 60 * 1000;
 
+export const MAX_AUDIO_TRANSCRIPT_RETRIES = 3;
+
+export const DEFAULT_CLEANUP_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+
 export type AudioTranscriptQueueItem = {
   id: string;
   audio_blob: Blob;
@@ -49,6 +53,7 @@ export type ContactRecord = {
   updated_at: number;
   event_id: string | null;
   audio_local_id?: string | null;
+  last_sync_error?: string | null;
 };
 
 function openDb(): Promise<IDBDatabase> {
@@ -268,6 +273,7 @@ export async function getPendingAudioTranscriptItems(
 export type UpdateAudioTranscriptItemStatusOptions = {
   last_error?: string | null;
   processed_at?: number | null;
+  retry_count_increment?: number;
 };
 
 export async function updateAudioTranscriptItemStatus(
@@ -292,12 +298,28 @@ export async function updateAudioTranscriptItemStatus(
         return;
       }
       const now = Date.now();
+      let retry_count = existing.retry_count;
+      if (options?.retry_count_increment != null && options.retry_count_increment > 0) {
+        retry_count = Math.min(
+          existing.retry_count + options.retry_count_increment,
+          MAX_AUDIO_TRANSCRIPT_RETRIES
+        );
+      }
+      const processed_at =
+        options?.processed_at !== undefined
+          ? options.processed_at
+          : status === "failed"
+            ? now
+            : status === "pending"
+              ? null
+              : existing.processed_at;
       const updated: AudioTranscriptQueueItem = {
         ...existing,
         status,
+        retry_count,
         status_updated_at: now,
         ...(options?.last_error !== undefined && { last_error: options.last_error }),
-        ...(options?.processed_at !== undefined && { processed_at: options.processed_at }),
+        processed_at,
       };
       const putReq = store.put(updated);
       putReq.onerror = () => {
@@ -307,6 +329,65 @@ export async function updateAudioTranscriptItemStatus(
       putReq.onsuccess = () => {
         db.close();
         resolve();
+      };
+    };
+  });
+}
+
+export type RecordAudioTranscriptFailureResult = { will_retry: boolean };
+
+export async function recordAudioTranscriptItemFailure(
+  id: string,
+  last_error: string
+): Promise<RecordAudioTranscriptFailureResult> {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_AUDIO_TRANSCRIPT_QUEUE, "readwrite");
+    const store = tx.objectStore(STORE_AUDIO_TRANSCRIPT_QUEUE);
+    const getReq = store.get(id);
+    getReq.onerror = () => {
+      db.close();
+      reject(getReq.error);
+    };
+    getReq.onsuccess = () => {
+      const existing = getReq.result as AudioTranscriptQueueItem | undefined;
+      if (!existing) {
+        db.close();
+        reject(new Error(`Audio transcript queue item not found: ${id}`));
+        return;
+      }
+      if (existing.status === "done") {
+        db.close();
+        reject(new Error("Cannot record failure for item that is already done"));
+        return;
+      }
+      if (existing.status === "failed") {
+        db.close();
+        reject(new Error("Cannot record failure for item that is already failed"));
+        return;
+      }
+      const newRetryCount = Math.min(
+        existing.retry_count + 1,
+        MAX_AUDIO_TRANSCRIPT_RETRIES
+      );
+      const will_retry = newRetryCount < MAX_AUDIO_TRANSCRIPT_RETRIES;
+      const now = Date.now();
+      const updated: AudioTranscriptQueueItem = {
+        ...existing,
+        status: will_retry ? "pending" : "failed",
+        last_error,
+        retry_count: newRetryCount,
+        processed_at: will_retry ? null : now,
+        status_updated_at: now,
+      };
+      const putReq = store.put(updated);
+      putReq.onerror = () => {
+        db.close();
+        reject(putReq.error);
+      };
+      putReq.onsuccess = () => {
+        db.close();
+        resolve({ will_retry });
       };
     };
   });
@@ -345,6 +426,64 @@ export async function setContactServerId(
         db.close();
         resolve();
       };
+    };
+  });
+}
+
+export type CleanupAudioTranscriptQueueOptions = {
+  olderThanMs?: number;
+};
+
+export type CleanupAudioTranscriptQueueResult = {
+  deleted: number;
+};
+
+export async function cleanupAudioTranscriptQueue(
+  options?: CleanupAudioTranscriptQueueOptions
+): Promise<CleanupAudioTranscriptQueueResult> {
+  const olderThanMs = Math.max(0, options?.olderThanMs ?? DEFAULT_CLEANUP_AGE_MS);
+  const cutoff = Date.now() - olderThanMs;
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_AUDIO_TRANSCRIPT_QUEUE, "readwrite");
+    const store = tx.objectStore(STORE_AUDIO_TRANSCRIPT_QUEUE);
+    const getReq = store.getAll();
+    getReq.onerror = () => {
+      db.close();
+      reject(getReq.error);
+    };
+    getReq.onsuccess = () => {
+      const all = (getReq.result as AudioTranscriptQueueItem[]) ?? [];
+      const toDelete = all.filter(
+        (item) =>
+          (item.status === "done" || item.status === "failed") &&
+          item.processed_at != null &&
+          item.processed_at < cutoff
+      );
+      if (toDelete.length === 0) {
+        db.close();
+        resolve({ deleted: 0 });
+        return;
+      }
+      let completed = 0;
+      let failed = false;
+      for (const item of toDelete) {
+        const delReq = store.delete(item.id);
+        delReq.onerror = () => {
+          if (!failed) {
+            failed = true;
+            db.close();
+            reject(delReq.error);
+          }
+        };
+        delReq.onsuccess = () => {
+          completed++;
+          if (completed === toDelete.length) {
+            db.close();
+            resolve({ deleted: toDelete.length });
+          }
+        };
+      }
     };
   });
 }
