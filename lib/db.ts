@@ -8,6 +8,14 @@ export interface OfflineContact {
     email?: string;
     phone: string;
     currentStage: string;
+
+    // New fields from schema update
+    company?: string;
+    intentTags?: any; // JSON
+    sourceMode?: string;
+    eventId?: string;
+    deviceId?: string;
+
     createdAt: string; // ISO string for easier storage
     updatedAt: string;
     syncStatus: 'pending' | 'synced' | 'failed';

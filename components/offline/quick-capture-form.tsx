@@ -15,6 +15,7 @@ const formSchema = z.object({
     name: z.string().min(2, "Name must be at least 2 characters"),
     phone: z.string().min(10, "Phone number must be at least 10 digits"),
     email: z.string().email().optional().or(z.literal("")),
+    company: z.string().optional(),
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -29,6 +30,7 @@ export function QuickCaptureForm() {
             name: "",
             phone: "",
             email: "",
+            company: "",
         },
     });
 
@@ -41,6 +43,7 @@ export function QuickCaptureForm() {
                 name: data.name,
                 phone: data.phone,
                 email: data.email || undefined,
+                company: data.company || undefined,
                 currentStage: "Met",
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString(),
@@ -77,6 +80,14 @@ export function QuickCaptureForm() {
                     <Input id="name" placeholder="John Doe" {...form.register("name")} />
                     {form.formState.errors.name && (
                         <p className="text-destructive text-sm">{form.formState.errors.name.message}</p>
+                    )}
+                </div>
+
+                <div className="space-y-2">
+                    <Label htmlFor="company">Company (Optional)</Label>
+                    <Input id="company" placeholder="Acme Corp" {...form.register("company")} />
+                    {form.formState.errors.company && (
+                        <p className="text-destructive text-sm">{form.formState.errors.company.message}</p>
                     )}
                 </div>
 

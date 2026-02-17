@@ -44,7 +44,7 @@ model PasswordResetToken {
 model Contact {
   @@map("contacts")
   id           String        @id @default(uuid())
-  name         String
+  name         String?
   email        String?
   phone        String        @unique
   currentStage String        @default("Met") @map("current_stage")
@@ -54,7 +54,7 @@ model Contact {
   followups    FollowUp[]
   company     String?
   intentTags  Json?
-  sourceMode  String
+  sourceMode  String   @default("manual")
   eventId     String?
   deviceId    String?
   version     Int      @default(1)
@@ -97,5 +97,4 @@ model AiJob {
   createdAt     DateTime    @default(now()) @map("created_at")
 
   @@map("ai_jobs")
-}
 }

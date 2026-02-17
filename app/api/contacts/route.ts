@@ -12,6 +12,12 @@ const contactSchema = z.object({
     name: z.string().optional(),
     email: z.string().email().optional().or(z.literal("")),
     phone: z.string().min(10, "Phone number must be at least 10 digits"),
+    // New fields
+    company: z.string().optional(),
+    intentTags: z.any().optional(), // Flexible JSON
+    sourceMode: z.string().default("manual"),
+    eventId: z.string().optional(),
+    deviceId: z.string().optional(),
 });
 
 export async function POST(req: Request) {
@@ -27,7 +33,7 @@ export async function POST(req: Request) {
             return createErrorResponse("VALIDATION_ERROR", validation.error.issues[0].message, 400);
         }
 
-        const { name, email, phone } = validation.data;
+        const { name, email, phone, company, intentTags, sourceMode, eventId, deviceId } = validation.data;
         const { id } = body; // Might be provided by offline client
 
         // Deterministic identity: Upsert by phone number
@@ -36,12 +42,22 @@ export async function POST(req: Request) {
             update: {
                 name: name || undefined, // Only update if provided
                 email: email || undefined,
+                company: company || undefined,
+                intentTags: intentTags || undefined,
+                // Don't update source info on existing contacts typically, or maybe update if provided?
+                // For now, let's keep sourceMode/eventId/deviceId immutable or update if needed.
             },
             create: {
                 id: id || undefined, // Use client ID if provided, otherwise auto-generate
-                name,
+                name: name || "Unknown",
                 email: email || null,
                 phone,
+                company,
+                intentTags: intentTags || undefined,
+                sourceMode,
+                eventId,
+                deviceId,
+                pendingSync: false, // Server side creates are synced by definition
             },
         });
 

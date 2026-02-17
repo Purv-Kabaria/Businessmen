@@ -94,6 +94,12 @@ class SyncService {
                 name: contact.name,
                 email: contact.email,
                 phone: contact.phone,
+                // Include new fields
+                company: contact.company,
+                intentTags: contact.intentTags,
+                sourceMode: contact.sourceMode,
+                eventId: contact.eventId,
+                deviceId: contact.deviceId,
             }),
         });
 
