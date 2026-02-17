@@ -2,23 +2,10 @@
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { useEffect } from "react";
 import { HERO_CONTENT } from "@/constants/home/hero-constants";
 import { Background } from "@/components/home/background";
-import { useAuthStore } from "@/store/useAuthStore";
 
 export function Hero() {
-  const { user, isLoading, checkAuth } = useAuthStore();
-  const showStallFieldCtas =
-    !user ||
-    (user.role !== "USER" && (user.role === "MODERATOR" || user.role === "ADMIN"));
-  const primaryHref = !user ? `/login?redirect=${encodeURIComponent("/stall")}` : HERO_CONTENT.ctas.primary.href;
-  const secondaryHref = !user ? `/login?redirect=${encodeURIComponent("/field")}` : HERO_CONTENT.ctas.secondary.href;
-
-  useEffect(() => {
-    checkAuth();
-  }, [checkAuth]);
-
   return (
     <section className="relative min-h-screen flex items-center justify-center overflow-hidden font-sans pt-24 md:pt-0 bg-linear-to-br from-background to-muted">
       <Background />
@@ -46,31 +33,29 @@ export function Hero() {
             {HERO_CONTENT.description}
           </motion.p>
 
-          {showStallFieldCtas && !isLoading && (
-            <motion.div
-              className="flex flex-col sm:flex-row gap-4 mb-16 w-full justify-center"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.8, delay: 0.3 }}>
-              <Button
-                size="lg"
-                className="bg-primary hover:bg-primary/90 text-primary-foreground text-base py-6 px-8 font-sans font-semibold rounded-md"
-                asChild>
-                <Link href={primaryHref}>
-                  {HERO_CONTENT.ctas.primary.label}
-                </Link>
-              </Button>
-              <Button
-                size="lg"
-                variant="outline"
-                className="border-border text-foreground/80 bg-transparent hover:bg-secondary hover:text-foreground text-base py-6 px-8 font-sans font-semibold rounded-md"
-                asChild>
-                <Link href={secondaryHref}>
-                  {HERO_CONTENT.ctas.secondary.label}
-                </Link>
-              </Button>
-            </motion.div>
-          )}
+          <motion.div
+            className="flex flex-col sm:flex-row gap-4 mb-16 w-full justify-center"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, delay: 0.3 }}>
+            <Button
+              size="lg"
+              className="bg-primary hover:bg-primary/90 text-primary-foreground text-base py-6 px-8 font-sans font-semibold rounded-md"
+              asChild>
+              <Link href={HERO_CONTENT.ctas.primary.href}>
+                {HERO_CONTENT.ctas.primary.label}
+              </Link>
+            </Button>
+            <Button
+              size="lg"
+              variant="outline"
+              className="border-border text-foreground/80 bg-transparent hover:bg-secondary hover:text-foreground text-base py-6 px-8 font-sans font-semibold rounded-md"
+              asChild>
+              <Link href={HERO_CONTENT.ctas.secondary.href}>
+                {HERO_CONTENT.ctas.secondary.label}
+              </Link>
+            </Button>
+          </motion.div>
 
           <motion.div
             className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 w-full max-w-4xl"

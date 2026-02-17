@@ -14,10 +14,6 @@ export async function middleware(request: NextRequest) {
     return await protectRoute(request, ["MODERATOR", "ADMIN"]);
   }
 
-  if (pathname === "/stall" || pathname === "/field") {
-    return await protectRoute(request, ["MODERATOR", "ADMIN"]);
-  }
-
   return NextResponse.next();
 }
 
@@ -79,5 +75,5 @@ async function protectRoute(
 }
 
 export const config = {
-  matcher: ["/admin/:path*", "/moderator/:path*", "/stall", "/field"],
+  matcher: ["/admin/:path*", "/moderator/:path*"],
 };

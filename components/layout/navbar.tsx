@@ -69,21 +69,10 @@ export function Navbar() {
     }
   };
 
-  const canAccessStallField =
-    !user || (user.role !== "USER" && (user.role === "MODERATOR" || user.role === "ADMIN"));
-  const navLinks = NAVBAR.links.filter((link) => {
-    if (link.href !== "/stall" && link.href !== "/field") return true;
-    return canAccessStallField;
-  });
-  const navItems = navLinks.map((link) => {
+  const navItems = NAVBAR.links.map((link) => {
     const Icon = link.icon;
-    const isStallOrField = link.href === "/stall" || link.href === "/field";
-    const href =
-      isStallOrField && !user
-        ? `/login?redirect=${encodeURIComponent(link.href)}`
-        : link.href;
     return {
-      href,
+      href: link.href,
       label: link.label,
       icon: <Icon className="h-4 w-4" />,
     };

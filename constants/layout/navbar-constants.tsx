@@ -1,7 +1,11 @@
 "use client";
 
 import type { LucideIcon } from "lucide-react";
-import { Store, MapPin } from "lucide-react";
+import {
+  Store,
+  MapPin,
+  LayoutDashboard,
+} from "lucide-react";
 
 export type NavLink = {
   href: string;
@@ -24,5 +28,6 @@ export const NAVBAR = {
   links: [
     { href: "/stall", label: "Stall Mode", icon: Store },
     { href: "/field", label: "Field Mode", icon: MapPin },
+    { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   ] as NavLink[],
 } as const;
